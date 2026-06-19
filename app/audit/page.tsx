@@ -34,7 +34,6 @@ export default function AuditPage() {
       router.push("/");
       return;
     }
-    // Fetch audit logs would go here - for now just show placeholder
     setLoading(false);
   }, [isAdmin, router]);
 

@@ -15,10 +15,36 @@ import {
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-const GATEWAY_URL = `${SUPABASE_URL}/functions/v1/api-gateway`;
+const FUNCTIONS_URL = `${SUPABASE_URL}/functions/v1`;
+const INCIDENTS_API_URL = `${FUNCTIONS_URL}/incidents-api`;
+const USERS_API_URL = `${FUNCTIONS_URL}/users-api`;
+const NOTIFICATIONS_API_URL = `${FUNCTIONS_URL}/notifications-api`;
+
+const SERVICE_ROUTES = [
+  {
+    prefix: "/incidents",
+    service: "incidents-api",
+    description: "Incident lifecycle management, comments, timeline",
+    url: INCIDENTS_API_URL,
+  },
+  {
+    prefix: "/users",
+    service: "users-api",
+    description: "User profiles, roles, team management",
+    url: USERS_API_URL,
+  },
+  {
+    prefix: "/notifications",
+    service: "notifications-api",
+    description: "Notification center, alerts, webhooks",
+    url: NOTIFICATIONS_API_URL,
+  },
+];
 
 async function getHeaders(): Promise<Record<string, string>> {
-  const { data: { session } } = await supabase.auth.getSession();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
   const token = session?.access_token ?? SUPABASE_ANON_KEY;
   return {
     "Content-Type": "application/json",
@@ -30,14 +56,27 @@ async function getHeaders(): Promise<Record<string, string>> {
 async function fetchJSON<T>(url: string, options?: RequestInit): Promise<T> {
   const headers = await getHeaders();
   const res = await fetch(url, {
-    headers,
     ...options,
+    headers,
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: "Request failed" }));
-    throw new Error(err.error || `API error: ${res.status}`);
+    throw await apiError(res);
   }
   return res.json();
+}
+
+async function apiError(res: Response): Promise<Error> {
+  const fallback = `API error: ${res.status}`;
+  const text = await res.text().catch(() => "");
+
+  if (!text) return new Error(fallback);
+
+  try {
+    const err = JSON.parse(text);
+    return new Error(err.error || err.message || fallback);
+  } catch {
+    return new Error(text || fallback);
+  }
 }
 
 function buildQueryString(filters: Record<string, unknown>): string {
@@ -51,20 +90,41 @@ function buildQueryString(filters: Record<string, unknown>): string {
   return qs ? `?${qs}` : "";
 }
 
-// ── Incidents API ─────────────────────────────────────────────────────
+function normalizePaginatedResponse<T>(
+  response: PaginatedResponse<T> | { data?: unknown; pagination?: unknown },
+  fallbackLimit = 20,
+): PaginatedResponse<T> {
+  const data = Array.isArray(response.data) ? response.data as T[] : [];
+  const fallbackPagination = {
+    page: 1,
+    limit: fallbackLimit,
+    total: data.length,
+    total_pages: data.length > 0 ? 1 : 0,
+  };
+
+  return {
+    data,
+    pagination: response.pagination && typeof response.pagination === "object"
+      ? response.pagination as PaginatedResponse<T>["pagination"]
+      : fallbackPagination,
+  };
+}
 
 export async function getIncidents(
-  filters: IncidentFilters = {}
+  filters: IncidentFilters = {},
 ): Promise<PaginatedResponse<Incident>> {
-  return fetchJSON(`${GATEWAY_URL}/incidents${buildQueryString(filters as Record<string, unknown>)}`);
+  const res = await fetchJSON<PaginatedResponse<Incident> | { data?: unknown; pagination?: unknown }>(
+    `${INCIDENTS_API_URL}${buildQueryString(filters as Record<string, unknown>)}`,
+  );
+  return normalizePaginatedResponse<Incident>(res, filters.limit);
 }
 
 export async function getIncident(id: string): Promise<{ data: Incident }> {
-  return fetchJSON(`${GATEWAY_URL}/incidents/${id}`);
+  return fetchJSON(`${INCIDENTS_API_URL}/${id}`);
 }
 
 export async function getIncidentStats(): Promise<IncidentStats> {
-  return fetchJSON(`${GATEWAY_URL}/incidents/stats`);
+  return fetchJSON(`${INCIDENTS_API_URL}/stats`);
 }
 
 export async function createIncident(data: {
@@ -74,17 +134,10 @@ export async function createIncident(data: {
   assigned_to?: string;
   team_id?: string;
 }): Promise<{ data: Incident }> {
-  const headers = await getHeaders();
-  const res = await fetch(`${GATEWAY_URL}/incidents`, {
+  return fetchJSON(`${INCIDENTS_API_URL}`, {
     method: "POST",
-    headers,
     body: JSON.stringify(data),
   });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: "Request failed" }));
-    throw new Error(err.error || `API error: ${res.status}`);
-  }
-  return res.json();
 }
 
 export async function updateIncident(
@@ -95,76 +148,60 @@ export async function updateIncident(
     severity: string;
     status: string;
     assigned_to: string | null;
-  }>
+  }>,
 ): Promise<{ data: Incident }> {
-  const headers = await getHeaders();
-  const res = await fetch(`${GATEWAY_URL}/incidents/${id}`, {
+  return fetchJSON(`${INCIDENTS_API_URL}/${id}`, {
     method: "PUT",
-    headers,
     body: JSON.stringify(data),
   });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: "Request failed" }));
-    throw new Error(err.error || `API error: ${res.status}`);
-  }
-  return res.json();
 }
 
 export async function addIncidentComment(
   incidentId: string,
   comment: string,
-  isInternal = false
+  isInternal = false,
 ): Promise<{ data: IncidentComment }> {
-  const headers = await getHeaders();
-  const res = await fetch(`${GATEWAY_URL}/incidents/${incidentId}/comments`, {
+  return fetchJSON(`${INCIDENTS_API_URL}/${incidentId}/comments`, {
     method: "POST",
-    headers,
     body: JSON.stringify({ comment, is_internal: isInternal }),
   });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: "Request failed" }));
-    throw new Error(err.error || `API error: ${res.status}`);
-  }
-  return res.json();
 }
 
-// ── Users API ──────────────────────────────────────────────────────────
-
 export async function getCurrentUser(): Promise<{ data: User }> {
-  return fetchJSON(`${GATEWAY_URL}/users/me`);
+  return fetchJSON(`${USERS_API_URL}/me`);
 }
 
 export async function getUsers(
-  filters: UserFilters = {}
+  filters: UserFilters = {},
 ): Promise<PaginatedResponse<User>> {
-  return fetchJSON(`${GATEWAY_URL}/users${buildQueryString(filters as Record<string, unknown>)}`);
+  const res = await fetchJSON<PaginatedResponse<User> | { data?: unknown; pagination?: unknown }>(
+    `${USERS_API_URL}${buildQueryString(filters as Record<string, unknown>)}`,
+  );
+  return normalizePaginatedResponse<User>(res, filters.limit);
 }
 
 export async function getUser(id: string): Promise<{ data: User }> {
-  return fetchJSON(`${GATEWAY_URL}/users/${id}`);
+  return fetchJSON(`${USERS_API_URL}/${id}`);
 }
 
 export async function updateUser(
   id: string,
-  data: Partial<{ name: string; avatar_url: string; role: string; team_id: string | null }>
+  data: Partial<{
+    name: string;
+    avatar_url: string;
+    role: string;
+    team_id: string | null;
+  }>,
 ): Promise<{ data: User }> {
-  const headers = await getHeaders();
-  const res = await fetch(`${GATEWAY_URL}/users/${id}`, {
+  return fetchJSON(`${USERS_API_URL}/${id}`, {
     method: "PUT",
-    headers,
     body: JSON.stringify(data),
   });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: "Request failed" }));
-    throw new Error(err.error || `API error: ${res.status}`);
-  }
-  return res.json();
 }
 
-// ── Teams API ──────────────────────────────────────────────────────────
-
 export async function getTeams(): Promise<{ data: Team[] }> {
-  return fetchJSON(`${GATEWAY_URL}/users/teams`);
+  const res = await fetchJSON<{ data: unknown }>(`${USERS_API_URL}/teams`);
+  return { data: Array.isArray(res.data) ? res.data as Team[] : [] };
 }
 
 export async function createTeam(data: {
@@ -172,66 +209,90 @@ export async function createTeam(data: {
   slug?: string;
   description?: string;
 }): Promise<{ data: Team }> {
-  const headers = await getHeaders();
-  const res = await fetch(`${GATEWAY_URL}/users/teams`, {
+  return fetchJSON(`${USERS_API_URL}/teams`, {
     method: "POST",
-    headers,
     body: JSON.stringify(data),
   });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: "Request failed" }));
-    throw new Error(err.error || `API error: ${res.status}`);
-  }
-  return res.json();
 }
 
-// ── Notifications API ──────────────────────────────────────────────────
-
 export async function getNotifications(
-  filters: NotificationFilters = {}
+  filters: NotificationFilters = {},
 ): Promise<PaginatedResponse<Notification>> {
-  return fetchJSON(`${GATEWAY_URL}/notifications${buildQueryString(filters as Record<string, unknown>)}`);
+  const res = await fetchJSON<PaginatedResponse<Notification> | { data?: unknown; pagination?: unknown }>(
+    `${NOTIFICATIONS_API_URL}${buildQueryString(filters as Record<string, unknown>)}`,
+  );
+  return normalizePaginatedResponse<Notification>(res, filters.limit);
 }
 
 export async function getUnreadCount(): Promise<{ count: number }> {
-  return fetchJSON(`${GATEWAY_URL}/notifications/unread`);
+  return fetchJSON(`${NOTIFICATIONS_API_URL}/unread`);
 }
 
-export async function markNotificationRead(id: string): Promise<{ success: boolean }> {
-  const headers = await getHeaders();
-  const res = await fetch(`${GATEWAY_URL}/notifications/${id}/read`, { method: "PUT", headers });
-  if (!res.ok) throw new Error("Failed to mark read");
-  return res.json();
+export async function markNotificationRead(
+  id: string,
+): Promise<{ success: boolean }> {
+  return fetchJSON(`${NOTIFICATIONS_API_URL}/${id}/read`, {
+    method: "PUT",
+  });
 }
 
 export async function markAllRead(): Promise<{ success: boolean }> {
-  const headers = await getHeaders();
-  const res = await fetch(`${GATEWAY_URL}/notifications/read-all`, { method: "PUT", headers });
-  if (!res.ok) throw new Error("Failed to mark all read");
-  return res.json();
+  return fetchJSON(`${NOTIFICATIONS_API_URL}/read-all`, {
+    method: "PUT",
+  });
 }
 
-export async function deleteNotification(id: string): Promise<{ deleted: boolean }> {
-  const headers = await getHeaders();
-  const res = await fetch(`${GATEWAY_URL}/notifications/${id}`, { method: "DELETE", headers });
-  if (!res.ok) throw new Error("Failed to delete notification");
-  return res.json();
+export async function deleteNotification(
+  id: string,
+): Promise<{ deleted: boolean }> {
+  return fetchJSON(`${NOTIFICATIONS_API_URL}/${id}`, {
+    method: "DELETE",
+  });
 }
 
-// ── Health & Gateway ──────────────────────────────────────────────────
-
-export async function getGatewayInfo(): Promise<{
-  gateway: string;
+export async function getServiceInfo(): Promise<{
+  architecture: string;
   version: string;
-  routes: { prefix: string; service: string; description: string }[];
+  routes: { prefix: string; service: string; description: string; url: string }[];
 }> {
-  return fetchJSON(`${GATEWAY_URL}/`);
+  return {
+    architecture: "direct-edge-functions",
+    version: "1.0.0",
+    routes: SERVICE_ROUTES,
+  };
 }
 
-export async function getGatewayHealth(): Promise<{
-  gateway: string;
+export async function getServiceHealth(): Promise<{
+  architecture: string;
   status: string;
-  services: { service: string; status: string; latency_ms: number }[];
+  services: { service: string; prefix: string; status: string; latency_ms: number }[];
 }> {
-  return fetchJSON(`${GATEWAY_URL}/health`);
+  const checks = await Promise.all(
+    SERVICE_ROUTES.map(async (route) => {
+      const start = performance.now();
+      try {
+        await fetchJSON(`${route.url}/health`);
+        return {
+          service: route.service,
+          prefix: route.prefix,
+          status: "healthy",
+          latency_ms: Math.round(performance.now() - start),
+        };
+      } catch {
+        return {
+          service: route.service,
+          prefix: route.prefix,
+          status: "unhealthy",
+          latency_ms: Math.round(performance.now() - start),
+        };
+      }
+    }),
+  );
+
+  const allHealthy = checks.every((check) => check.status === "healthy");
+  return {
+    architecture: "direct-edge-functions",
+    status: allHealthy ? "healthy" : "degraded",
+    services: checks,
+  };
 }

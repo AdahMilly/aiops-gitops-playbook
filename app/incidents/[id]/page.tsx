@@ -196,7 +196,6 @@ export default function IncidentDetailPage() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-center gap-4">
           <Link href="/incidents">
@@ -229,9 +228,7 @@ export default function IncidentDetailPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Main Content */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Description */}
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Description</CardTitle>
@@ -242,8 +239,6 @@ export default function IncidentDetailPage() {
               </p>
             </CardContent>
           </Card>
-
-          {/* Comments */}
           <Card>
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2">
@@ -281,10 +276,7 @@ export default function IncidentDetailPage() {
             </CardContent>
           </Card>
         </div>
-
-        {/* Sidebar */}
         <div className="space-y-6">
-          {/* Quick Actions */}
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Quick Actions</CardTitle>
@@ -352,8 +344,6 @@ export default function IncidentDetailPage() {
               </div>
             </CardContent>
           </Card>
-
-          {/* People */}
           <Card>
             <CardHeader>
               <CardTitle className="text-base">People</CardTitle>
@@ -381,8 +371,6 @@ export default function IncidentDetailPage() {
               )}
             </CardContent>
           </Card>
-
-          {/* Timeline */}
           <Card>
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2">

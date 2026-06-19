@@ -195,8 +195,6 @@ export default function UsersPage() {
           </DialogContent>
         </Dialog>
       </div>
-
-      {/* Search */}
       <div className="relative max-w-sm">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
@@ -206,8 +204,6 @@ export default function UsersPage() {
           onChange={(e) => setSearch(e.target.value)}
         />
       </div>
-
-      {/* Teams Summary */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card>
           <CardContent className="pt-4">
@@ -262,8 +258,6 @@ export default function UsersPage() {
           </CardContent>
         </Card>
       </div>
-
-      {/* Users List */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base">All Users</CardTitle>

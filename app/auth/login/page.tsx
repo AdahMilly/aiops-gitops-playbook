@@ -20,12 +20,14 @@ export default function LoginPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
     setError(null);
     setSubmitting(true);
 
-    const { error } = await signIn(email, password);
-    if (error) {
-      setError(error);
+    const result = await signIn(email, password);
+
+    if (result?.error) {
+      setError(result.error);
       setSubmitting(false);
     } else {
       router.push("/");
@@ -34,16 +36,18 @@ export default function LoginPage() {
 
   return (
     <div className="flex min-h-screen">
-      {/* Left panel */}
       <div className="hidden lg:flex lg:w-1/2 flex-col items-center justify-center bg-card border-r border-border/60 p-12 relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-accent/5" />
         <div className="relative z-10 max-w-sm text-center">
           <div className="mx-auto mb-8 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/20 ring-2 ring-primary/20">
             <Shield className="h-8 w-8 text-primary" />
           </div>
-          <h1 className="text-3xl font-bold tracking-tight">Incident Command</h1>
+          <h1 className="text-3xl font-bold tracking-tight">
+            Incident Command
+          </h1>
           <p className="mt-4 text-muted-foreground leading-relaxed">
-            A microservice-powered platform for DevOps teams to manage, track, and resolve incidents at scale.
+            A microservice-powered platform for DevOps teams to manage, track,
+            and resolve incidents at scale.
           </p>
           <div className="mt-10 grid grid-cols-3 gap-4 text-center">
             {[
@@ -51,19 +55,20 @@ export default function LoginPage() {
               { value: "<2min", label: "Alert Time" },
               { value: "5 svcs", label: "Microservices" },
             ].map((stat) => (
-              <div key={stat.label} className="rounded-lg bg-secondary/50 px-3 py-3">
+              <div
+                key={stat.label}
+                className="rounded-lg bg-secondary/50 px-3 py-3">
                 <p className="text-lg font-bold text-primary">{stat.value}</p>
-                <p className="text-[11px] text-muted-foreground">{stat.label}</p>
+                <p className="text-[11px] text-muted-foreground">
+                  {stat.label}
+                </p>
               </div>
             ))}
           </div>
         </div>
       </div>
-
-      {/* Right panel */}
       <div className="flex flex-1 flex-col items-center justify-center p-6 lg:p-12">
         <div className="w-full max-w-md animate-scale-in">
-          {/* Mobile logo */}
           <div className="mb-8 flex items-center justify-center gap-3 lg:hidden">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/20">
               <Shield className="h-5 w-5 text-primary" />
@@ -73,7 +78,9 @@ export default function LoginPage() {
 
           <div className="mb-8">
             <h2 className="text-2xl font-bold tracking-tight">Welcome back</h2>
-            <p className="mt-1.5 text-sm text-muted-foreground">Sign in to your account to continue</p>
+            <p className="mt-1.5 text-sm text-muted-foreground">
+              Sign in to your account to continue
+            </p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-5">
@@ -85,7 +92,9 @@ export default function LoginPage() {
             )}
 
             <div className="space-y-1.5">
-              <Label htmlFor="email" className="text-sm font-medium">Email address</Label>
+              <Label htmlFor="email" className="text-sm font-medium">
+                Email address
+              </Label>
               <Input
                 id="email"
                 type="email"
@@ -99,7 +108,9 @@ export default function LoginPage() {
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="password" className="text-sm font-medium">Password</Label>
+              <Label htmlFor="password" className="text-sm font-medium">
+                Password
+              </Label>
               <div className="relative">
                 <Input
                   id="password"
@@ -114,14 +125,20 @@ export default function LoginPage() {
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
+                  {showPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
                 </button>
               </div>
             </div>
 
-            <Button type="submit" className="h-11 w-full text-sm font-semibold" disabled={submitting}>
+            <Button
+              type="submit"
+              className="h-11 w-full text-sm font-semibold"
+              disabled={submitting}>
               {submitting ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -135,7 +152,9 @@ export default function LoginPage() {
 
           <p className="mt-6 text-center text-sm text-muted-foreground">
             Don&apos;t have an account?{" "}
-            <Link href="/auth/signup" className="font-medium text-primary hover:underline underline-offset-4">
+            <Link
+              href="/auth/signup"
+              className="font-medium text-primary hover:underline underline-offset-4">
               Create account
             </Link>
           </p>

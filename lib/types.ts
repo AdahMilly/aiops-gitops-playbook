@@ -1,11 +1,8 @@
-// ── Domain Types ─────────────────────────────────────────────────────
 
 export type Severity = "low" | "medium" | "high" | "critical";
 export type IncidentStatus = "open" | "investigating" | "identified" | "monitoring" | "resolved" | "closed";
 export type UserRole = "admin" | "engineer" | "viewer";
 export type NotificationType = "incident_created" | "incident_assigned" | "incident_updated" | "incident_resolved" | "comment_added";
-
-// ── User ──────────────────────────────────────────────────────────────
 
 export interface Team {
   id: string;
@@ -28,8 +25,6 @@ export interface User {
   created_at: string;
   updated_at: string;
 }
-
-// ── Incident ──────────────────────────────────────────────────────────
 
 export interface Incident {
   id: string;
@@ -74,8 +69,6 @@ export interface IncidentTimelineEvent {
   profiles?: User;
 }
 
-// ── Notification ───────────────────────────────────────────────────────
-
 export interface Notification {
   id: string;
   user_id: string;
@@ -87,8 +80,6 @@ export interface Notification {
   created_at: string;
   incidents?: { id: string; title: string; severity: Severity; status: IncidentStatus };
 }
-
-// ── Audit Log ──────────────────────────────────────────────────────────
 
 export interface AuditLog {
   id: string;
@@ -103,8 +94,6 @@ export interface AuditLog {
   created_at: string;
   profiles?: User;
 }
-
-// ── API Response Types ──────────────────────────────────────────────────
 
 export interface PaginatedResponse<T> {
   data: T[];
@@ -124,8 +113,6 @@ export interface IncidentStats {
   recent: Incident[];
   mttr_hours?: number;
 }
-
-// ── Filter Types ────────────────────────────────────────────────────────
 
 export interface IncidentFilters {
   page?: number;

@@ -40,10 +40,9 @@ Deno.serve(async (req: Request) => {
   };
 
   try {
-    // ── Health Check ──
     if (slug === "health") {
       const uptime = Math.floor((Date.now() - startTime) / 1000);
-      // Quick DB ping
+
       const dbStart = Date.now();
       const dbRes = await fetch(`${supabaseUrl}/rest/v1/products?select=id&limit=1`, { headers: authHeaders });
       const dbLatency = Date.now() - dbStart;
@@ -82,7 +81,6 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    // ── Stats ──
     if (slug === "stats") {
       const [totalRes, featuredRes, outOfStockRes, avgPriceRes] = await Promise.all([
         fetch(`${supabaseUrl}/rest/v1/products?select=id&is_active=eq.true`, { headers: { ...authHeaders, Prefer: "count=exact" } }),
@@ -102,8 +100,6 @@ Deno.serve(async (req: Request) => {
         out_of_stock: outOfStock,
       });
     }
-
-    // ── GET /products - List products with filtering ──
     if (req.method === "GET" && !slug) {
       const page = parseInt(url.searchParams.get("page") || "1");
       const limit = Math.min(parseInt(url.searchParams.get("limit") || "12"), 50);
@@ -151,8 +147,6 @@ Deno.serve(async (req: Request) => {
         pagination: { page, limit, total, total_pages: Math.ceil(total / limit) },
       });
     }
-
-    // ── GET /products/:slug ──
     if (req.method === "GET" && slug) {
       const result = await fetch(
         `${supabaseUrl}/rest/v1/products?slug=eq.${slug}&select=*,categories(id,name,slug,description),product_images(id,url,alt_text,sort_order,is_primary),product_tags(tag)`,
@@ -162,8 +156,6 @@ Deno.serve(async (req: Request) => {
       if (!products || products.length === 0) return errorResponse("Product not found", 404);
       return jsonResponse({ data: products[0] });
     }
-
-    // ── POST /products ──
     if (req.method === "POST" && !slug) {
       const body = await req.json();
       const result = await fetch(`${supabaseUrl}/rest/v1/products`, {
@@ -175,8 +167,6 @@ Deno.serve(async (req: Request) => {
       if (!result.ok) return errorResponse(data.message || "Failed to create product", result.status);
       return jsonResponse({ data: data[0] }, 201);
     }
-
-    // ── PUT /products/:slug ──
     if (req.method === "PUT" && slug) {
       const body = await req.json();
       const result = await fetch(`${supabaseUrl}/rest/v1/products?slug=eq.${slug}`, {
@@ -188,8 +178,6 @@ Deno.serve(async (req: Request) => {
       if (!result.ok) return errorResponse(data.message || "Failed to update product", result.status);
       return jsonResponse({ data: data[0] });
     }
-
-    // ── DELETE /products/:slug ──
     if (req.method === "DELETE" && slug) {
       await fetch(`${supabaseUrl}/rest/v1/products?slug=eq.${slug}`, {
         method: "DELETE",

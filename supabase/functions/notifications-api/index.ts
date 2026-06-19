@@ -21,14 +21,18 @@ function errorResponse(message: string, status = 400) {
   return jsonResponse({ error: message }, status);
 }
 
-function getAuthHeaders(req: Request, serviceKey: string) {
-  const authHeader = req.headers.get("Authorization");
-  const token = authHeader?.replace("Bearer ", "");
+function getAuthHeaders(_req: Request, serviceKey: string) {
   return {
     apikey: serviceKey,
-    Authorization: `Bearer ${token || serviceKey}`,
+    Authorization: `Bearer ${serviceKey}`,
     "Content-Type": "application/json",
   };
+}
+
+function getRouteParts(url: URL): string[] {
+  const parts = url.pathname.replace(/^\/+|\/+$/g, "").split("/").filter(Boolean);
+  const functionNameIndex = parts.indexOf(SERVICE_NAME);
+  return functionNameIndex >= 0 ? parts.slice(functionNameIndex + 1) : parts;
 }
 
 async function getUserId(req: Request, supabaseUrl: string, serviceKey: string): Promise<string | null> {
@@ -54,15 +58,14 @@ Deno.serve(async (req: Request) => {
   }
 
   const url = new URL(req.url);
-  const pathParts = url.pathname.replace(/^\/+|\/+$/g, "").split("/");
-  const action = pathParts[1] || null;
-  const notificationId = pathParts[2] || null;
+  const pathParts = getRouteParts(url);
+  const action = pathParts[0] || null;
+  const notificationId = pathParts[1] || null;
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
   try {
-    // ── Health Check ──
     if (action === "health") {
       const uptime = Math.floor((Date.now() - startTime) / 1000);
       return jsonResponse({
@@ -81,7 +84,6 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    // ── Unread Count ──
     if (action === "unread") {
       const userId = await getUserId(req, supabaseUrl, serviceKey);
       if (!userId) return errorResponse("Unauthorized", 401);
@@ -93,7 +95,6 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ count: notifications.length });
     }
 
-    // ── Mark All Read ──
     if (req.method === "PUT" && action === "read-all") {
       const userId = await getUserId(req, supabaseUrl, serviceKey);
       if (!userId) return errorResponse("Unauthorized", 401);
@@ -107,8 +108,6 @@ Deno.serve(async (req: Request) => {
 
       return jsonResponse({ success: true });
     }
-
-    // ── Mark Single Read ──
     if (req.method === "PUT" && action && notificationId === "read") {
       const userId = await getUserId(req, supabaseUrl, serviceKey);
       if (!userId) return errorResponse("Unauthorized", 401);
@@ -122,8 +121,6 @@ Deno.serve(async (req: Request) => {
 
       return jsonResponse({ success: true });
     }
-
-    // ── List Notifications ──
     if (req.method === "GET" && !action) {
       const userId = await getUserId(req, supabaseUrl, serviceKey);
       if (!userId) return errorResponse("Unauthorized", 401);
@@ -147,8 +144,6 @@ Deno.serve(async (req: Request) => {
         pagination: { page, limit, total, total_pages: Math.ceil(total / limit) },
       });
     }
-
-    // ── Delete Notification ──
     if (req.method === "DELETE" && action) {
       const userId = await getUserId(req, supabaseUrl, serviceKey);
       if (!userId) return errorResponse("Unauthorized", 401);

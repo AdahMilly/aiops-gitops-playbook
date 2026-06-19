@@ -39,7 +39,6 @@ Deno.serve(async (req: Request) => {
   };
 
   try {
-    // ── Health Check ──
     if (slug === "health") {
       const uptime = Math.floor((Date.now() - startTime) / 1000);
       const dbStart = Date.now();
@@ -67,8 +66,6 @@ Deno.serve(async (req: Request) => {
         ],
       });
     }
-
-    // ── GET /categories ──
     if (req.method === "GET" && !slug) {
       const result = await fetch(
         `${supabaseUrl}/rest/v1/categories?select=*,products(count)&is_active=eq.true&order=sort_order.asc`,
@@ -77,8 +74,6 @@ Deno.serve(async (req: Request) => {
       const categories = await result.json();
       return jsonResponse({ data: categories });
     }
-
-    // ── GET /categories/:slug ──
     if (req.method === "GET" && slug) {
       const result = await fetch(
         `${supabaseUrl}/rest/v1/categories?slug=eq.${slug}&select=*,products(id,name,slug,price,short_description,product_images(id,url,alt_text,sort_order,is_primary))`,
@@ -88,8 +83,6 @@ Deno.serve(async (req: Request) => {
       if (!categories || categories.length === 0) return errorResponse("Category not found", 404);
       return jsonResponse({ data: categories[0] });
     }
-
-    // ── POST /categories ──
     if (req.method === "POST" && !slug) {
       const body = await req.json();
       const result = await fetch(`${supabaseUrl}/rest/v1/categories`, {
@@ -102,7 +95,6 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ data: data[0] }, 201);
     }
 
-    // ── PUT /categories/:slug ──
     if (req.method === "PUT" && slug) {
       const body = await req.json();
       const result = await fetch(`${supabaseUrl}/rest/v1/categories?slug=eq.${slug}`, {
@@ -115,7 +107,6 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ data: data[0] });
     }
 
-    // ── DELETE /categories/:slug ──
     if (req.method === "DELETE" && slug) {
       await fetch(`${supabaseUrl}/rest/v1/categories?slug=eq.${slug}`, {
         method: "DELETE",

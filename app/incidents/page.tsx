@@ -151,8 +151,6 @@ function IncidentsListContent() {
           </Button>
         </Link>
       </div>
-
-      {/* Filters */}
       <Card>
         <CardContent className="pt-4">
           <div className="flex flex-wrap items-center gap-3">
@@ -221,8 +219,6 @@ function IncidentsListContent() {
           </div>
         </CardContent>
       </Card>
-
-      {/* Incidents Grid */}
       {loading ? (
         <div className="flex items-center justify-center h-64">
           <AlertTriangle className="h-5 w-5 animate-pulse text-primary" />
@@ -244,8 +240,6 @@ function IncidentsListContent() {
               <IncidentCard key={incident.id} incident={incident} />
             ))}
           </div>
-
-          {/* Pagination */}
           {totalPages > 1 && (
             <div className="flex items-center justify-center gap-2">
               <Button

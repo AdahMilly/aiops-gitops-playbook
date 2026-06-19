@@ -38,7 +38,6 @@ Deno.serve(async (req: Request) => {
   };
 
   try {
-    // ── Health Check ──
     if (action === "health") {
       const uptime = Math.floor((Date.now() - startTime) / 1000);
       const dbStart = Date.now();
@@ -81,8 +80,6 @@ Deno.serve(async (req: Request) => {
     if (req.method !== "GET") {
       return errorResponse("Method not allowed", 405);
     }
-
-    // ── Search ──
     const q = url.searchParams.get("q") || "";
     const categorySlug = url.searchParams.get("category");
     const minPrice = url.searchParams.get("min_price");

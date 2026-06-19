@@ -95,21 +95,17 @@ function Sidebar({
 
   return (
     <>
-      {/* Backdrop */}
       <div
         className={`fixed inset-0 z-30 bg-black/60 backdrop-blur-sm transition-opacity md:hidden ${
           open ? "opacity-100" : "opacity-0 pointer-events-none"
         }`}
         onClick={onClose}
       />
-
-      {/* Sidebar */}
       <aside
         className={`fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-border/60 bg-card transition-transform duration-200 ease-in-out md:translate-x-0 ${
           open ? "translate-x-0" : "-translate-x-full"
         }`}
       >
-        {/* Logo */}
         <div className="flex h-16 items-center gap-3 border-b border-border/60 px-4">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/20 ring-1 ring-primary/20">
             <Shield className="h-5 w-5 text-primary" />
@@ -121,8 +117,6 @@ function Sidebar({
             </p>
           </div>
         </div>
-
-        {/* Navigation */}
         <nav className="flex-1 overflow-y-auto px-3 py-4">
           <div className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">
             Navigation
@@ -139,8 +133,6 @@ function Sidebar({
             ))}
           </div>
         </nav>
-
-        {/* User profile */}
         <div className="border-t border-border/60 p-3">
           {profile ? (
             <div className="mb-2 flex items-center gap-3 rounded-lg bg-secondary/40 px-3 py-2">
@@ -229,7 +221,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       const res = await getUnreadCount();
       setUnread(res.count);
     } catch {
-      // ignore
     }
   }, [user]);
 
@@ -243,7 +234,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return () => clearInterval(interval);
   }, [fetchUnread]);
 
-  // Auth redirect
   useEffect(() => {
     if (loading) return;
     if (!user && !isAuthPage) {

@@ -66,7 +66,6 @@ export default function SignupPage() {
 
   return (
     <div className="flex min-h-screen">
-      {/* Left panel */}
       <div className="hidden lg:flex lg:w-1/2 flex-col items-center justify-center bg-card border-r border-border/60 p-12 relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-accent/5" />
         <div className="relative z-10 max-w-sm text-center">
@@ -92,11 +91,8 @@ export default function SignupPage() {
           </div>
         </div>
       </div>
-
-      {/* Right panel */}
       <div className="flex flex-1 flex-col items-center justify-center p-6 lg:p-12">
         <div className="w-full max-w-md animate-scale-in">
-          {/* Mobile logo */}
           <div className="mb-8 flex items-center justify-center gap-3 lg:hidden">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/20">
               <Shield className="h-5 w-5 text-primary" />

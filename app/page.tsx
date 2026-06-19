@@ -100,7 +100,8 @@ export default function DashboardPage() {
     );
   }
 
-  const activeIncidents = recent.filter(
+  const recentIncidents = Array.isArray(recent) ? recent : [];
+  const activeIncidents = recentIncidents.filter(
     (i) => !["resolved", "closed"].includes(i.status)
   );
 
@@ -120,8 +121,6 @@ export default function DashboardPage() {
           </Button>
         </Link>
       </div>
-
-      {/* Stats Grid */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <StatCard
           title="Total Incidents"
@@ -145,8 +144,6 @@ export default function DashboardPage() {
           icon={AlertCircle}
         />
       </div>
-
-      {/* By Severity */}
       {stats?.by_severity && (
         <Card>
           <CardHeader>
@@ -166,8 +163,6 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       )}
-
-      {/* Active Incidents */}
       <Card>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
@@ -194,15 +189,13 @@ export default function DashboardPage() {
           )}
         </CardContent>
       </Card>
-
-      {/* Recent Activity */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Recent Activity</CardTitle>
         </CardHeader>
         <CardContent className="pt-0 px-2">
           <div className="space-y-1">
-            {recent.slice(0, 5).map((incident) => (
+            {recentIncidents.slice(0, 5).map((incident) => (
               <IncidentRow key={incident.id} incident={incident} />
             ))}
           </div>

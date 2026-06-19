@@ -21,14 +21,18 @@ function errorResponse(message: string, status = 400) {
   return jsonResponse({ error: message }, status);
 }
 
-function getAuthHeaders(req: Request, serviceKey: string) {
-  const authHeader = req.headers.get("Authorization");
-  const token = authHeader?.replace("Bearer ", "");
+function getAuthHeaders(_req: Request, serviceKey: string) {
   return {
     apikey: serviceKey,
-    Authorization: `Bearer ${token || serviceKey}`,
+    Authorization: `Bearer ${serviceKey}`,
     "Content-Type": "application/json",
   };
+}
+
+function getRouteParts(url: URL): string[] {
+  const parts = url.pathname.replace(/^\/+|\/+$/g, "").split("/").filter(Boolean);
+  const functionNameIndex = parts.indexOf(SERVICE_NAME);
+  return functionNameIndex >= 0 ? parts.slice(functionNameIndex + 1) : parts;
 }
 
 async function getUserId(req: Request, supabaseUrl: string, serviceKey: string): Promise<string | null> {
@@ -57,15 +61,14 @@ Deno.serve(async (req: Request) => {
   }
 
   const url = new URL(req.url);
-  const pathParts = url.pathname.replace(/^\/+|\/+$/g, "").split("/");
-  const action = pathParts[1] || null;
-  const subAction = pathParts[2] || null;
+  const pathParts = getRouteParts(url);
+  const action = pathParts[0] || null;
+  const subAction = pathParts[1] || null;
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
   try {
-    // ── Health Check ──
     if (action === "health") {
       const uptime = Math.floor((Date.now() - startTime) / 1000);
       return jsonResponse({
@@ -93,7 +96,6 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    // ── Statistics ──
     if (action === "stats") {
       const headers = getAuthHeaders(req, serviceKey);
 
@@ -105,6 +107,12 @@ Deno.serve(async (req: Request) => {
         fetch(`${supabaseUrl}/rest/v1/rpc/get_mttr`, { headers }).catch(() => null),
         fetch(`${supabaseUrl}/rest/v1/incidents?select=id,title,severity,status,created_at&order=created_at.desc&limit=5`, { headers }),
       ]);
+
+      if (!totalRes.ok) return errorResponse("Failed to load incident totals", totalRes.status);
+      if (!openRes.ok) return errorResponse("Failed to load open incidents", openRes.status);
+      if (!resolvedRes.ok) return errorResponse("Failed to load resolved incidents", resolvedRes.status);
+      if (!bySeverityRes.ok) return errorResponse("Failed to load incidents by severity", bySeverityRes.status);
+      if (!recentRes.ok) return errorResponse("Failed to load recent incidents", recentRes.status);
 
       const total = totalRes.headers.get("content-range")?.split("/")[1] || "0";
       const open = (await openRes.json()).length;
@@ -125,11 +133,10 @@ Deno.serve(async (req: Request) => {
         resolved,
         by_severity: bySeverity,
         recent,
-        mttr_hours: null, // Would need custom SQL function
+        mttr_hours: null,
       });
     }
 
-    // ── List Incidents ──
     if (req.method === "GET" && !action) {
       const headers = getAuthHeaders(req, serviceKey);
       const page = parseInt(url.searchParams.get("page") || "1");
@@ -158,6 +165,7 @@ Deno.serve(async (req: Request) => {
 
       const result = await fetch(query, { headers: { ...headers, Prefer: "count=exact" } });
       const incidents = await result.json();
+      if (!result.ok) return errorResponse(incidents.message || "Failed to list incidents", result.status);
       const contentRange = result.headers.get("content-range");
       const total = contentRange ? parseInt(contentRange.split("/")[1] || "0") : incidents.length;
 
@@ -166,8 +174,6 @@ Deno.serve(async (req: Request) => {
         pagination: { page, limit, total, total_pages: Math.ceil(total / limit) },
       });
     }
-
-    // ── Get Single Incident ──
     if (req.method === "GET" && action && !subAction) {
       const headers = getAuthHeaders(req, serviceKey);
 
@@ -188,8 +194,6 @@ Deno.serve(async (req: Request) => {
 
       return jsonResponse({ data: incident });
     }
-
-    // ── Create Incident ──
     if (req.method === "POST" && !action) {
       const userId = await getUserId(req, supabaseUrl, serviceKey);
       if (!userId) return errorResponse("Unauthorized", 401);
@@ -198,6 +202,7 @@ Deno.serve(async (req: Request) => {
       const headers = getAuthHeaders(req, serviceKey);
 
       const incident = {
+        id: crypto.randomUUID(),
         title: body.title,
         description: body.description || null,
         severity: body.severity || "medium",
@@ -210,52 +215,61 @@ Deno.serve(async (req: Request) => {
 
       const result = await fetch(`${supabaseUrl}/rest/v1/incidents`, {
         method: "POST",
-        headers: { ...headers, Prefer: "return=representation" },
+        headers: { ...headers, Prefer: "return=minimal" },
         body: JSON.stringify(incident),
       });
 
-      const data = await result.json();
-      if (!result.ok) return errorResponse(data.message || "Failed to create incident", result.status);
-
-      // Create timeline event
-      await fetch(`${supabaseUrl}/rest/v1/incident_timeline`, {
+      if (!result.ok) {
+        const data = await result.json().catch(() => ({}));
+        return errorResponse(`Incident insert failed: ${data.message || "Failed to create incident"}`, result.status);
+      }
+      const timelineRes = await fetch(`${supabaseUrl}/rest/v1/incident_timeline`, {
         method: "POST",
         headers,
         body: JSON.stringify({
-          incident_id: data[0].id,
+          incident_id: incident.id,
           event_type: "created",
           description: "Incident created",
           user_id: userId,
         }),
       });
-
-      // Create notification for assigned user
+      if (!timelineRes.ok) {
+        const data = await timelineRes.json().catch(() => ({}));
+        return errorResponse(`Timeline insert failed: ${data.message || "Incident created, but failed to create timeline event"}`, timelineRes.status);
+      }
       if (body.assigned_to) {
-        await fetch(`${supabaseUrl}/rest/v1/notifications`, {
+        const notificationRes = await fetch(`${supabaseUrl}/rest/v1/notifications`, {
           method: "POST",
           headers,
           body: JSON.stringify({
             user_id: body.assigned_to,
-            incident_id: data[0].id,
+            incident_id: incident.id,
             type: "incident_assigned",
             title: "New Incident Assigned",
             message: `You have been assigned to "${body.title}"`,
           }),
         });
+        if (!notificationRes.ok) {
+          const data = await notificationRes.json().catch(() => ({}));
+          return errorResponse(`Notification insert failed: ${data.message || "Incident created, but failed to create notification"}`, notificationRes.status);
+        }
       }
 
-      return jsonResponse({ data: data[0] }, 201);
+      return jsonResponse({
+        data: {
+          ...incident,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+      }, 201);
     }
 
-    // ── Update Incident ──
     if (req.method === "PUT" && action && !subAction) {
       const userId = await getUserId(req, supabaseUrl, serviceKey);
       if (!userId) return errorResponse("Unauthorized", 401);
 
       const headers = getAuthHeaders(req, serviceKey);
       const body = await req.json();
-
-      // Get current incident
       const currentRes = await fetch(`${supabaseUrl}/rest/v1/incidents?id=eq.${action}`, { headers });
       const current = (await currentRes.json())[0];
       if (!current) return errorResponse("Incident not found", 404);
@@ -294,7 +308,6 @@ Deno.serve(async (req: Request) => {
       if (body.title) updates.title = body.title;
       if (body.description !== undefined) updates.description = body.description;
 
-      // Update incident
       const result = await fetch(`${supabaseUrl}/rest/v1/incidents?id=eq.${action}`, {
         method: "PATCH",
         headers: { ...headers, Prefer: "return=representation" },
@@ -304,7 +317,6 @@ Deno.serve(async (req: Request) => {
       const data = await result.json();
       if (!result.ok) return errorResponse(data.message || "Failed to update incident", result.status);
 
-      // Create timeline events
       for (const event of timelineEvents) {
         await fetch(`${supabaseUrl}/rest/v1/incident_timeline`, {
           method: "POST",
@@ -317,7 +329,6 @@ Deno.serve(async (req: Request) => {
         });
       }
 
-      // Create audit log
       await fetch(`${supabaseUrl}/rest/v1/audit_logs`, {
         method: "POST",
         headers,
@@ -334,7 +345,6 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ data: data[0] });
     }
 
-    // ── Add Comment ──
     if (req.method === "POST" && action && subAction === "comments") {
       const userId = await getUserId(req, supabaseUrl, serviceKey);
       if (!userId) return errorResponse("Unauthorized", 401);
@@ -357,8 +367,6 @@ Deno.serve(async (req: Request) => {
 
       const data = await result.json();
       if (!result.ok) return errorResponse(data.message || "Failed to add comment", result.status);
-
-      // Create timeline event
       await fetch(`${supabaseUrl}/rest/v1/incident_timeline`, {
         method: "POST",
         headers,
