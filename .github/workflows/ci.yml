@@ -36,3 +36,7 @@ jobs:
   trivy-scan:
     needs: build-stage
     uses: ./.github/workflows/trivy.yml
+
+  push-stage:
+    needs: trivy-scan
+    uses: ./.github/workflows/push.yml
