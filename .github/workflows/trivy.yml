@@ -15,12 +15,16 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: docker-image
 
-      - name: Build Docker Image
+      - name: Load Docker Image
         run: |
-          docker build \
-            -t $IMAGE_NAME:${{ github.sha }} .
+          gunzip -c docker-image.tar.gz | docker load
+
+      - name: Verify Image
+        run: docker image inspect $IMAGE_NAME:${{ github.sha }}
 
       - name: Generate Trivy JSON Report
         uses: aquasecurity/trivy-action@master
@@ -38,6 +42,14 @@ jobs:
           output: trivy-results.sarif
           exit-code: "0"
 
+      - name: Generate SBOM
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.IMAGE_NAME }}:${{ github.sha }}
+          format: cyclonedx
+          output: sbom.json
+          exit-code: "0"
+
       - name: Upload SARIF
         uses: github/codeql-action/upload-sarif@v3
         with:
@@ -51,7 +63,7 @@ jobs:
           severity: CRITICAL
           exit-code: "1"
 
-      - name: Upload Trivy Reports
+      - name: Upload Trivy Artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -59,3 +71,4 @@ jobs:
           path: |
             trivy-results.json
             trivy-results.sarif
+            sbom.json
