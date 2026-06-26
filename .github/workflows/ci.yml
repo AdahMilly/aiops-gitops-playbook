@@ -32,9 +32,7 @@ jobs:
   build-stage:
     needs: sast-scan
     uses: ./.github/workflows/build.yml
-    secrets:
-      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+    secrets: inherit
 
   trivy-scan:
     needs: build-stage
