@@ -17,118 +17,27 @@ permissions:
   packages: write
   id-token: write
 
-env:
-  IMAGE_NAME: aiops-gitops-playbook
-
 jobs:
-  quality:
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-
-      - run: npm ci
-
-      - name: Lint
-        run: npm run lint
-
-      - name: Type Check
-        run: npx tsc --noEmit
-
-      - name: Run Tests
-        run: npm test -- --passWithNoTests
-
   dependency-scan:
-    runs-on: ubuntu-latest
+    uses: ./.github/workflows/dependency-scan.yml
 
-    steps:
-      - uses: actions/checkout@v4
+  secrets-scan:
+    needs: dependency-scan
+    uses: ./.github/workflows/secrets-scan.yml
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
+  sast-scan:
+    needs: secrets-scan
+    uses: ./.github/workflows/codeql.yml
 
-      - run: npm ci
+  build-stage:
+    needs: sast-scan
+    uses: ./.github/workflows/build.yml
+    secrets: inherit
 
-      - name: NPM Audit
-        run: npm audit --audit-level=high
+  trivy-scan:
+    needs: build-stage
+    uses: ./.github/workflows/trivy.yml
 
-  secrets:
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Trufflehog
-        uses: trufflesecurity/trufflehog@main
-        with:
-          path: ./
-          base: HEAD~1
-          head: HEAD
-
-  codeql:
-    runs-on: ubuntu-latest
-
-    permissions:
-      security-events: write
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: github/codeql-action/init@v3
-        with:
-          languages: javascript
-
-      - uses: github/codeql-action/autobuild@v3
-
-      - uses: github/codeql-action/analyze@v3
-
-  build:
-    needs:
-      - quality
-      - dependency-scan
-      - secrets
-      - codeql
-
-    runs-on: ubuntu-latest
-
-    outputs:
-      image-tag: ${{ github.sha }}
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: docker/setup-buildx-action@v3
-
-      - name: Build Image
-        run: |
-          docker build \
-          -t ${{ env.IMAGE_NAME }}:${{ github.sha }} .
-
-  trivy:
-    needs: build
-
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - run: |
-          docker build \
-          -t ${{ env.IMAGE_NAME }}:${{ github.sha }} .
-
-      - name: Scan Docker Image
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: ${{ env.IMAGE_NAME }}:${{ github.sha }}
-          format: sarif
-          output: trivy-results.sarif
-
-      - uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: trivy-results.sarif
+  push-stage:
+    needs: trivy-scan
+    uses: ./.github/workflows/push.yml

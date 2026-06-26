@@ -1,0 +1,108 @@
+name: Push Image
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE_NAME: aiops-gitops-playbook
+  REGISTRY: ghcr.io
+
+jobs:
+  push:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download Docker Image
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-image
+
+      - name: Load Docker Image
+        run: |
+          gunzip -c docker-image.tar.gz | docker load
+
+      - name: Verify Image
+        run: docker image inspect $IMAGE_NAME:${{ github.sha }}
+
+      - name: Prepare Image Name
+        id: image
+        shell: bash
+        run: |
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          IMAGE_URI="${{ env.REGISTRY }}/${OWNER}/${{ env.IMAGE_NAME }}"
+
+          echo "owner=$OWNER" >> $GITHUB_OUTPUT
+          echo "image=$IMAGE_URI" >> $GITHUB_OUTPUT
+
+          echo "Image URI: $IMAGE_URI"
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Tag SHA Image
+        run: |
+          docker tag \
+            $IMAGE_NAME:${{ github.sha }} \
+            ${{ steps.image.outputs.image }}:${{ github.sha }}
+
+      - name: Push SHA Image
+        run: |
+          docker push \
+            ${{ steps.image.outputs.image }}:${{ github.sha }}
+
+      - name: Tag and Push Develop
+        if: github.ref_name == 'develop'
+        run: |
+          docker tag \
+            $IMAGE_NAME:${{ github.sha }} \
+            ${{ steps.image.outputs.image }}:develop
+
+          docker push \
+            ${{ steps.image.outputs.image }}:develop
+
+      - name: Tag and Push Latest
+        if: github.ref_name == 'main'
+        run: |
+          docker tag \
+            $IMAGE_NAME:${{ github.sha }} \
+            ${{ steps.image.outputs.image }}:latest
+
+          docker push \
+            ${{ steps.image.outputs.image }}:latest
+
+      - name: Generate Push Metadata
+        run: |
+          jq -n \
+            --arg registry "${{ env.REGISTRY }}" \
+            --arg image "${{ steps.image.outputs.image }}" \
+            --arg tag "${{ github.sha }}" \
+            --arg branch "${{ github.ref_name }}" \
+            --arg commit "${{ github.sha }}" \
+            --arg actor "${{ github.actor }}" \
+            --arg run "${{ github.run_number }}" \
+            --arg pushed_at "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
+            '{
+              registry: $registry,
+              image: $image,
+              tag: $tag,
+              branch: $branch,
+              commit: $commit,
+              actor: $actor,
+              run: $run,
+              pushed_at: $pushed_at
+            }' > push-metadata.json
+
+      - name: Upload Push Metadata
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: push-metadata
+          path: push-metadata.json
