@@ -23,7 +23,7 @@ jobs:
 
   secrets-scan:
     needs: dependency-scan
-    uses: ./.github/workflows/secrets.yml
+    uses: ./.github/workflows/secrets-scan.yml
 
   sast-scan:
     needs: secrets-scan
