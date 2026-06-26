@@ -16,7 +16,8 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/download-artifact@v4
+      - name: Download Docker Image
+        uses: actions/download-artifact@v4
         with:
           name: docker-image
 
@@ -26,6 +27,18 @@ jobs:
 
       - name: Verify Image
         run: docker image inspect $IMAGE_NAME:${{ github.sha }}
+
+      - name: Prepare Image Name
+        id: image
+        shell: bash
+        run: |
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          IMAGE_URI="${{ env.REGISTRY }}/${OWNER}/${{ env.IMAGE_NAME }}"
+
+          echo "owner=$OWNER" >> $GITHUB_OUTPUT
+          echo "image=$IMAGE_URI" >> $GITHUB_OUTPUT
+
+          echo "Image URI: $IMAGE_URI"
 
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
@@ -38,46 +51,52 @@ jobs:
         run: |
           docker tag \
             $IMAGE_NAME:${{ github.sha }} \
-            $REGISTRY/${{ github.repository_owner }}/$IMAGE_NAME:${{ github.sha }}
+            ${{ steps.image.outputs.image }}:${{ github.sha }}
 
-      - name: Push SHA Tag
+      - name: Push SHA Image
         run: |
           docker push \
-            $REGISTRY/${{ github.repository_owner }}/$IMAGE_NAME:${{ github.sha }}
+            ${{ steps.image.outputs.image }}:${{ github.sha }}
 
-      - name: Push Branch Tag
+      - name: Tag and Push Develop
         if: github.ref_name == 'develop'
         run: |
           docker tag \
             $IMAGE_NAME:${{ github.sha }} \
-            $REGISTRY/${{ github.repository_owner }}/$IMAGE_NAME:develop
+            ${{ steps.image.outputs.image }}:develop
 
           docker push \
-            $REGISTRY/${{ github.repository_owner }}/$IMAGE_NAME:develop
+            ${{ steps.image.outputs.image }}:develop
 
-      - name: Push Latest Tag
+      - name: Tag and Push Latest
         if: github.ref_name == 'main'
         run: |
           docker tag \
             $IMAGE_NAME:${{ github.sha }} \
-            $REGISTRY/${{ github.repository_owner }}/$IMAGE_NAME:latest
+            ${{ steps.image.outputs.image }}:latest
 
           docker push \
-            $REGISTRY/${{ github.repository_owner }}/$IMAGE_NAME:latest
+            ${{ steps.image.outputs.image }}:latest
 
       - name: Generate Push Metadata
         run: |
           jq -n \
-            --arg image "$REGISTRY/${{ github.repository_owner }}/$IMAGE_NAME" \
+            --arg registry "${{ env.REGISTRY }}" \
+            --arg image "${{ steps.image.outputs.image }}" \
             --arg tag "${{ github.sha }}" \
             --arg branch "${{ github.ref_name }}" \
-            --arg registry "$REGISTRY" \
+            --arg commit "${{ github.sha }}" \
+            --arg actor "${{ github.actor }}" \
+            --arg run "${{ github.run_number }}" \
             --arg pushed_at "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
             '{
               registry: $registry,
               image: $image,
               tag: $tag,
               branch: $branch,
+              commit: $commit,
+              actor: $actor,
+              run: $run,
               pushed_at: $pushed_at
             }' > push-metadata.json
 
