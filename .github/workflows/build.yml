@@ -1,0 +1,66 @@
+name: Docker Build
+
+on:
+  workflow_call:
+    outputs:
+      image-tag:
+        description: Docker image tag
+        value: ${{ jobs.build.outputs.image-tag }}
+
+permissions:
+  contents: read
+
+env:
+  IMAGE_NAME: aiops-gitops-playbook
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    outputs:
+      image-tag: ${{ steps.image.outputs.tag }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker Image
+        run: |
+          docker build \
+            --tag $IMAGE_NAME:${{ github.sha }} \
+            .
+
+      - name: Export Image Tag
+        id: image
+        run: echo "tag=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+
+      - name: Generate Build Metadata
+        run: |
+          jq -n \
+            --arg image "$IMAGE_NAME" \
+            --arg tag "${{ github.sha }}" \
+            --arg branch "${{ github.ref_name }}" \
+            --arg commit "${{ github.sha }}" \
+            --arg workflow "${{ github.workflow }}" \
+            --arg run_id "${{ github.run_id }}" \
+            --arg actor "${{ github.actor }}" \
+            --arg built_at "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
+            '{
+              image: $image,
+              tag: $tag,
+              branch: $branch,
+              commit: $commit,
+              workflow: $workflow,
+              run_id: $run_id,
+              actor: $actor,
+              built_at: $built_at
+            }' > docker-build-metadata.json
+
+      - name: Upload Build Metadata
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-metadata
+          path: docker-build-metadata.json
