@@ -1,0 +1,46 @@
+name: GitOps Update
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+env:
+  GITOPS_REPO: AdahMilly/aiops-gitops
+
+jobs:
+  update-gitops:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout GitOps Repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.GITOPS_REPO }}
+          token: ${{ secrets.GITOPS_TOKEN }}
+          path: gitops
+
+      - name: Update Image Tag
+        run: |
+          sed -i "s|image: .*|image: ghcr.io/${{ github.repository_owner }}/aiops-gitops-playbook:${{ github.sha }}|g" \
+          gitops/apps/aiops-playbook/overlays/dev/patch.yaml
+
+      - name: Configure Git
+        run: |
+          git config --global user.email "github-actions@github.com"
+          git config --global user.name "github-actions"
+
+      - name: Commit Changes
+        working-directory: gitops
+        run: |
+          git add .
+
+          git diff --cached --quiet && exit 0
+
+          git commit \
+          -m "Deploy ${{ github.sha }}"
+
+      - name: Push
+        working-directory: gitops
+        run: git push

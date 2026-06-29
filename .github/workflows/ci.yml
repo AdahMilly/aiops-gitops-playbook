@@ -41,3 +41,8 @@ jobs:
   push-stage:
     needs: trivy-scan
     uses: ./.github/workflows/push.yml
+
+  gitops-update:
+    needs: push-stage
+    uses: ./.github/workflows/gitops-update.yml
+    secrets: inherit
