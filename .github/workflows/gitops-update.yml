@@ -10,36 +10,81 @@ env:
   GITOPS_REPO: AdahMilly/aiops-gitops
 
 jobs:
-  update-gitops:
+  update:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout GitOps Repo
+      - name: Checkout GitOps Repository
         uses: actions/checkout@v4
         with:
           repository: ${{ env.GITOPS_REPO }}
           token: ${{ secrets.GITOPS_TOKEN }}
           path: gitops
 
-      - name: Update Image Tag
+      - name: Convert owner to lowercase
+        id: owner
+        shell: bash
         run: |
-          sed -i "s|image: .*|image: ghcr.io/${{ github.repository_owner }}/aiops-gitops-playbook:${{ github.sha }}|g" \
-          gitops/apps/aiops-playbook/overlays/dev/patch.yaml
+          echo "owner=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
+      - name: Install Kustomize
+        run: |
+          curl -sLo kustomize.tar.gz \
+            https://github.com/kubernetes-sigs/kustomize/releases/latest/download/kustomize_linux_amd64.tar.gz
+          tar -xzf kustomize.tar.gz
+          sudo mv kustomize /usr/local/bin/
+
+      - name: Update image
+        working-directory: gitops/apps/aiops-playbook/overlays/dev
+        run: |
+          kustomize edit set image \
+            ghcr.io/adahmilly/aiops-gitops-playbook=ghcr.io/adahmilly/aiops-gitops-playbook:${{ github.sha }}
 
       - name: Configure Git
         run: |
-          git config --global user.email "github-actions@github.com"
           git config --global user.name "github-actions"
+          git config --global user.email "github-actions@github.com"
 
-      - name: Commit Changes
+      - name: Commit changes
         working-directory: gitops
         run: |
           git add .
+          if git diff --cached --quiet; then
+            echo "No changes."
+            exit 0
+          fi
 
-          git diff --cached --quiet && exit 0
+          git commit -m "Deploy ${{ github.sha }}"
+          git push
 
-          git commit \
-          -m "Deploy ${{ github.sha }}"
-      - name: Push
-        working-directory: gitops
-        run: git push
+      - name: Generate Deployment Metadata
+        run: |
+          jq -n \
+            --arg image "ghcr.io/adahmilly/aiops-gitops-playbook" \
+            --arg tag "${{ github.sha }}" \
+            --arg branch "${{ github.ref_name }}" \
+            --arg repo "${{ env.GITOPS_REPO }}" \
+            --arg commit "${{ github.sha }}" \
+            --arg actor "${{ github.actor }}" \
+            --arg workflow "${{ github.workflow }}" \
+            --arg run "${{ github.run_number }}" \
+            --arg deployed "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
+            '{
+              image: $image,
+              tag: $tag,
+              branch: $branch,
+              gitops_repository: $repo,
+              commit: $commit,
+              actor: $actor,
+              workflow: $workflow,
+              run: $run,
+              deployed_at: $deployed
+            }' > gitops-update.json
+
+      - name: Upload Deployment Metadata
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gitops-update
+          path: gitops-update.json
+          retention-days: 30
