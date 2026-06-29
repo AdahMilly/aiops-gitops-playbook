@@ -40,7 +40,6 @@ jobs:
 
           git commit \
           -m "Deploy ${{ github.sha }}"
-
       - name: Push
         working-directory: gitops
         run: git push
