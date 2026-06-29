@@ -27,18 +27,14 @@ jobs:
         run: |
           echo "owner=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
 
-      - name: Install Kustomize
-        run: |
-          curl -sLo kustomize.tar.gz \
-            https://github.com/kubernetes-sigs/kustomize/releases/latest/download/kustomize_linux_amd64.tar.gz
-          tar -xzf kustomize.tar.gz
-          sudo mv kustomize /usr/local/bin/
+      - name: Setup Kustomize
+        uses: imranismail/setup-kustomize@v2
 
-      - name: Update image
-        working-directory: gitops/apps/aiops-playbook/overlays/dev
+      - name: Update Image Tag
         run: |
-          kustomize edit set image \
-            ghcr.io/adahmilly/aiops-gitops-playbook=ghcr.io/adahmilly/aiops-gitops-playbook:${{ github.sha }}
+          sed -i \
+            "s|image: .*|image: ghcr.io/adahmilly/aiops-gitops-playbook:${{ github.sha }}|g" \
+            gitops/apps/aiops-playbook/overlays/dev/patch.yaml
 
       - name: Configure Git
         run: |
