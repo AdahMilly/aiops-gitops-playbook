@@ -141,8 +141,8 @@ Detailed implementation guides are available in the `docs` directory:
 * **Docker** – Containerization strategy and multi-stage builds
 * **CI/CD** – GitHub Actions pipeline and reusable workflows
 * **GitOps** – Argo CD, Kustomize, and automated deployments
-* **Observability** *(coming next)* – Prometheus, Grafana, and monitoring
-* **Security** *(coming soon)* – DevSecOps controls and best practices
+<!-- * **Observability** *(coming next)* – Prometheus, Grafana, and monitoring
+* **Security** *(coming soon)* – DevSecOps controls and best practices -->
 
 ---
 
@@ -164,7 +164,3 @@ Detailed implementation guides are available in the `docs` directory:
 * ⏳ Progressive delivery (Canary/Blue-Green)
 
 ---
-
-# License
-
-This project is intended for learning, experimentation, and demonstrating modern DevSecOps and GitOps practices.
