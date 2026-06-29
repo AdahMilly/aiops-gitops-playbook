@@ -1,4 +1,4 @@
-# devops-aiops-gitops-playbook
+# DevOps-AIOps-GitOps-Playbook
 
 # Dockerization and CI/CD
 
@@ -30,10 +30,10 @@ RUN npm ci
 
 **Purpose**
 
-* Uses the lightweight Alpine Node.js image
-* Installs dependencies with `npm ci`
-* Creates reproducible builds
-* Caches dependencies for faster future builds
+- Uses the lightweight Alpine Node.js image
+- Installs dependencies with `npm ci`
+- Creates reproducible builds
+- Caches dependencies for faster future builds
 
 ---
 
@@ -60,10 +60,10 @@ RUN npm run build
 
 **Purpose**
 
-* Copies installed dependencies
-* Injects build-time environment variables
-* Compiles the production-ready Next.js application
-* Generates the standalone server
+- Copies installed dependencies
+- Injects build-time environment variables
+- Compiles the production-ready Next.js application
+- Generates the standalone server
 
 ---
 
@@ -89,11 +89,11 @@ CMD ["node", "server.js"]
 
 **Benefits**
 
-* Minimal production image
-* Faster deployment
-* Smaller attack surface
-* Faster image pulls
-* Reduced storage consumption
+- Minimal production image
+- Faster deployment
+- Smaller attack surface
+- Faster image pulls
+- Reduced storage consumption
 
 ---
 
@@ -154,15 +154,15 @@ services:
 
 ## Features
 
-* Builds the application automatically
-* Loads environment variables from `.env`
-* Maps:
+- Builds the application automatically
+- Loads environment variables from `.env`
+- Maps:
 
 ```
 localhost:3001 → container:3000
 ```
 
-* Passes build arguments required by Next.js
+- Passes build arguments required by Next.js
 
 ---
 
@@ -257,10 +257,10 @@ Scans project dependencies for known vulnerabilities before the application is b
 
 **Purpose**
 
-* Detect vulnerable packages
-* Identify outdated dependencies
-* Reduce software supply chain risks
-* Encourage early remediation
+- Detect vulnerable packages
+- Identify outdated dependencies
+- Reduce software supply chain risks
+- Encourage early remediation
 
 ---
 
@@ -274,11 +274,11 @@ Searches the repository for accidentally committed credentials or sensitive info
 
 Examples include:
 
-* API keys
-* Tokens
-* Passwords
-* Cloud credentials
-* SSH keys
+- API keys
+- Tokens
+- Passwords
+- Cloud credentials
+- SSH keys
 
 This helps prevent sensitive information from entering version control.
 
@@ -294,12 +294,12 @@ Uses **CodeQL** to perform static analysis of the source code.
 
 The scan detects issues such as:
 
-* SQL Injection
-* Cross-Site Scripting (XSS)
-* Command Injection
-* Unsafe coding patterns
-* Security vulnerabilities
-* Potential bugs
+- SQL Injection
+- Cross-Site Scripting (XSS)
+- Command Injection
+- Unsafe coding patterns
+- Security vulnerabilities
+- Potential bugs
 
 Static analysis allows vulnerabilities to be identified before deployment.
 
@@ -315,10 +315,10 @@ Compiles the application and builds the Docker image after all security checks h
 
 The build stage validates that:
 
-* The application compiles successfully
-* Docker image creation succeeds
-* Required environment variables are available
-* The application is ready for deployment
+- The application compiles successfully
+- Docker image creation succeeds
+- Required environment variables are available
+- The application is ready for deployment
 
 ---
 
@@ -332,11 +332,11 @@ Uses **Trivy** to scan the built container image.
 
 The scan checks for:
 
-* Operating system vulnerabilities
-* Vulnerable packages
-* Misconfigurations
-* Embedded secrets
-* High and critical CVEs
+- Operating system vulnerabilities
+- Vulnerable packages
+- Misconfigurations
+- Embedded secrets
+- High and critical CVEs
 
 The pipeline can be configured to fail if severe vulnerabilities are detected, preventing insecure images from being published.
 
@@ -352,11 +352,11 @@ Publishes the validated Docker image to the configured container registry.
 
 This stage runs only after:
 
-* Dependency scan passes
-* Secrets scan passes
-* SAST passes
-* Build succeeds
-* Trivy scan reports no blocking vulnerabilities
+- Dependency scan passes
+- Secrets scan passes
+- SAST passes
+- Build succeeds
+- Trivy scan reports no blocking vulnerabilities
 
 Only verified images are eligible for deployment.
 
@@ -368,14 +368,13 @@ The pipeline follows a **shift-left security** strategy by integrating security 
 
 Key practices include:
 
-* Automated dependency vulnerability scanning
-* Secret detection before deployment
-* Static application security testing (SAST)
-* Container image vulnerability scanning
-* Multi-stage Docker builds for minimal production images
-* Reproducible builds using `npm ci`
-* Environment variables managed outside the container image
-* Sequential quality gates that prevent insecure artifacts from progressing
+- Automated dependency vulnerability scanning
+- Secret detection before deployment
+- Static application security testing (SAST)
+- Container image vulnerability scanning
+- Multi-stage Docker builds for minimal production images
+- Reproducible builds using `npm ci`
+- Environment variables managed outside the container image
+- Sequential quality gates that prevent insecure artifacts from progressing
 
 This approach ensures that every Docker image produced by the pipeline has undergone automated validation for code quality, dependency health, secret exposure, and container security before being released.
-
