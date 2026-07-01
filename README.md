@@ -39,32 +39,32 @@ GitHub Actions CI
 
 # Technology Stack
 
-* Next.js
-* Docker
-* GitHub Actions
-* GitHub Container Registry (GHCR)
-* Trivy
-* CodeQL
-* TruffleHog
-* Kubernetes (Kind)
-* Argo CD
-* Kustomize
+- Next.js
+- Docker
+- GitHub Actions
+- GitHub Container Registry (GHCR)
+- Trivy
+- CodeQL
+- TruffleHog
+- Kubernetes (Kind)
+- Argo CD
+- Kustomize
 
 ---
 
 # Features
 
-* Multi-stage Docker builds
-* DevSecOps CI pipeline
-* Automated security scanning
-* Static Application Security Testing (SAST)
-* Container vulnerability scanning
-* GitHub Container Registry integration
-* GitOps deployment workflow
-* Automated Kubernetes deployments with Argo CD
-* Rolling updates
-* Build and deployment metadata generation
-* Artifact generation for every pipeline stage
+- Multi-stage Docker builds
+- DevSecOps CI pipeline
+- Automated security scanning
+- Static Application Security Testing (SAST)
+- Container vulnerability scanning
+- GitHub Container Registry integration
+- GitOps deployment workflow
+- Automated Kubernetes deployments with Argo CD
+- Rolling updates
+- Build and deployment metadata generation
+- Artifact generation for every pipeline stage
 
 ---
 
@@ -138,29 +138,29 @@ The deployment process follows GitOps principles:
 
 Detailed implementation guides are available in the `docs` directory:
 
-* **Docker** – Containerization strategy and multi-stage builds
-* **CI/CD** – GitHub Actions pipeline and reusable workflows
-* **GitOps** – Argo CD, Kustomize, and automated deployments
-<!-- * **Observability** *(coming next)* – Prometheus, Grafana, and monitoring
-* **Security** *(coming soon)* – DevSecOps controls and best practices -->
+- **Docker** – Containerization strategy and multi-stage builds
+- **CI/CD** – GitHub Actions pipeline and reusable workflows
+- **GitOps** – Argo CD, Kustomize, and automated deployments
+- **Observability** – Prometheus, Grafana, and monitoring - observability
+<!-- * **Security** *(coming soon)* – DevSecOps controls and best practices -->
 
 ---
 
 # Roadmap
 
-* ✅ Dockerized application
-* ✅ GitHub Actions CI pipeline
-* ✅ Dependency vulnerability scanning
-* ✅ Secret scanning
-* ✅ CodeQL SAST
-* ✅ Trivy container scanning
-* ✅ GitHub Container Registry
-* ✅ GitOps deployment with Argo CD
-* ✅ Kubernetes deployment
-* ⏳ Prometheus monitoring
-* ⏳ Grafana dashboards
-* ⏳ Centralized logging
-* ⏳ Alerting
-* ⏳ Progressive delivery (Canary/Blue-Green)
+- ✅ Dockerized application
+- ✅ GitHub Actions CI pipeline
+- ✅ Dependency vulnerability scanning
+- ✅ Secret scanning
+- ✅ CodeQL SAST
+- ✅ Trivy container scanning
+- ✅ GitHub Container Registry
+- ✅ GitOps deployment with Argo CD
+- ✅ Kubernetes deployment
+- ⏳ Prometheus monitoring
+- ⏳ Grafana dashboards
+- ⏳ Centralized logging
+- ⏳ Alerting
+- ⏳ Progressive delivery (Canary/Blue-Green)
 
 ---

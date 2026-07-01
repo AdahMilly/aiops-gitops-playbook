@@ -1,8 +1,18 @@
-
 export type Severity = "low" | "medium" | "high" | "critical";
-export type IncidentStatus = "open" | "investigating" | "identified" | "monitoring" | "resolved" | "closed";
+export type IncidentStatus =
+  | "open"
+  | "investigating"
+  | "identified"
+  | "monitoring"
+  | "resolved"
+  | "closed";
 export type UserRole = "admin" | "engineer" | "viewer";
-export type NotificationType = "incident_created" | "incident_assigned" | "incident_updated" | "incident_resolved" | "comment_added";
+export type NotificationType =
+  | "incident_created"
+  | "incident_assigned"
+  | "incident_updated"
+  | "incident_resolved"
+  | "comment_added";
 
 export interface Team {
   id: string;
@@ -78,7 +88,12 @@ export interface Notification {
   message: string;
   is_read: boolean;
   created_at: string;
-  incidents?: { id: string; title: string; severity: Severity; status: IncidentStatus };
+  incidents?: {
+    id: string;
+    title: string;
+    severity: Severity;
+    status: IncidentStatus;
+  };
 }
 
 export interface AuditLog {
@@ -137,5 +152,6 @@ export interface UserFilters {
 export interface NotificationFilters {
   page?: number;
   limit?: number;
+  vv?: number;
   unread_only?: boolean;
 }
