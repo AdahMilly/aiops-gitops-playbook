@@ -11,6 +11,7 @@ export const httpRequests = new client.Counter({
   name: "aiops_http_requests_total",
   help: "Total HTTP requests",
   labelNames: ["method", "route", "status"],
+  registers: [register],
 });
 
 export const httpDuration = new client.Histogram({
@@ -18,9 +19,7 @@ export const httpDuration = new client.Histogram({
   help: "HTTP request duration",
   labelNames: ["method", "route"],
   buckets: [0.1, 0.3, 0.5, 1, 2, 5],
+  registers: [register],
 });
-
-register.registerMetric(httpRequests);
-register.registerMetric(httpDuration);
 
 export default register;
