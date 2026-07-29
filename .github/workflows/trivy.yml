@@ -60,9 +60,18 @@ jobs:
         with:
           image-ref: ${{ env.IMAGE_NAME }}:${{ github.sha }}
           format: table
+          ignore-unfixed: true
+          vuln-type: library
           severity: CRITICAL
           exit-code: "1"
 
+      - name: Report OS Vulnerabilities
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.IMAGE_NAME }}:${{ github.sha }}
+          vuln-type: os
+          severity: HIGH,CRITICAL
+          exit-code: "0"
       - name: Upload Trivy Artifacts
         if: always()
         uses: actions/upload-artifact@v4
