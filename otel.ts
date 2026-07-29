@@ -6,15 +6,14 @@ import { SemanticResourceAttributes } from "@opentelemetry/semantic-conventions"
 
 const sdk = new NodeSDK({
   resource: resourceFromAttributes({
-    [SemanticResourceAttributes.SERVICE_NAME]:
-      "aiops-gitops-playbook",
+    [SemanticResourceAttributes.SERVICE_NAME]: "aiops-gitops-playbook",
   }),
 
-  traceExporter: new OTLPTraceExporter(),
+  traceExporter: new OTLPTraceExporter({
+    url: process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
+  }),
 
-  instrumentations: [
-    getNodeAutoInstrumentations(),
-  ],
+  instrumentations: [getNodeAutoInstrumentations()],
 });
 
 sdk.start();
