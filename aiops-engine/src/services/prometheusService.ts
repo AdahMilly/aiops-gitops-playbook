@@ -72,3 +72,39 @@ export async function getRequestRate(service: string): Promise<number> {
 
   return Number(result[0].value[1]);
 }
+
+export async function getCPUHistory(container: string, minutes = 15) {
+  const end = new Date();
+  const start = new Date(end.getTime() - minutes * 60 * 1000);
+
+  return queryRange(
+    `
+    rate(
+      container_cpu_usage_seconds_total{
+        namespace="${SERVICES.APP.namespace}",
+        container="${container}"
+      }[2m]
+    )
+    `,
+    start,
+    end,
+    "30s",
+  );
+}
+
+export async function getMemoryHistory(container: string, minutes = 15) {
+  const end = new Date();
+  const start = new Date(end.getTime() - minutes * 60 * 1000);
+
+  return queryRange(
+    `
+    container_memory_usage_bytes{
+      namespace="${SERVICES.APP.namespace}",
+      container="${container}"
+    }
+    `,
+    start,
+    end,
+    "30s",
+  );
+}
