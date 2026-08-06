@@ -1,97 +1,188 @@
+import { RootCauseAnalysis } from "./rootCauseEngine";
+import { CorrelationFinding } from "./correlationEngine";
+
+export interface Prediction {
+  metric?: string;
+  risk: "Low" | "Medium" | "High" | "Critical";
+  message: string;
+}
+
 export interface Recommendation {
   priority: "Low" | "Medium" | "High" | "Critical";
   issue: string;
-  action: string;
+  actions: string[];
   automation?: string;
 }
 
 export function recommend(
-  causes: any[],
-  correlations: any[],
-  predictions: any[],
+  rootCause: RootCauseAnalysis | null,
+  correlations: CorrelationFinding[],
+  predictions: Prediction[],
 ): Recommendation[] {
-  const recommendations: Recommendation[] = [];
+  const recommendations = new Map<string, Recommendation>();
 
-  for (const cause of causes) {
-    switch (cause.title) {
-      case "High CPU Usage":
-        recommendations.push({
+  const addRecommendation = (recommendation: Recommendation) => {
+    const existing = recommendations.get(recommendation.issue);
+
+    if (!existing) {
+      recommendations.set(recommendation.issue, recommendation);
+      return;
+    }
+
+    existing.actions = existing.actions.filter(
+      (action, index, self) => self.indexOf(action) === index,
+    );
+
+    recommendation.actions.forEach((action) => {
+      if (!existing.actions.includes(action)) {
+        existing.actions.push(action);
+      }
+    });
+
+    if (
+      priorityWeight(recommendation.priority) >
+      priorityWeight(existing.priority)
+    ) {
+      existing.priority = recommendation.priority;
+    }
+
+    if (!existing.automation && recommendation.automation) {
+      existing.automation = recommendation.automation;
+    }
+  };
+
+  if (rootCause) {
+    switch (rootCause.subcategory) {
+      case "Node Failure":
+        addRecommendation({
           priority: "Critical",
-          issue: cause.title,
-          action:
-            "Identify CPU-intensive requests, inspect recent deployments, and consider scaling the deployment.",
-          automation: "kubectl scale deployment aiops-playbook --replicas=3",
+          issue: "Cluster node unavailable",
+          actions: [
+            "Inspect kubelet status.",
+            "Check node CPU, memory and disk pressure.",
+            "Verify node network connectivity.",
+            "Drain and recover the affected node.",
+            "Reschedule workloads if the node remains unavailable.",
+          ],
+          automation: "kubectl describe node <node-name>",
         });
         break;
 
-      case "Memory Leak":
-        recommendations.push({
+      case "Health Check Failure":
+        addRecommendation({
           priority: "Critical",
-          issue: cause.title,
-          action:
-            "Capture heap profile, inspect allocations, and restart affected pods if necessary.",
+          issue: "Application Unhealthy",
+          actions: [
+            "Inspect application logs.",
+            "Verify the application is listening on the configured port.",
+            "Review readiness and liveness probes.",
+            "Validate startup dependencies.",
+            "Restart the deployment if required.",
+          ],
           automation: "kubectl rollout restart deployment aiops-playbook",
         });
         break;
 
-      case "Tracing Missing":
-        recommendations.push({
+      case "Memory Pressure":
+        addRecommendation({
+          priority: "Critical",
+          issue: "Memory Pressure",
+          actions: [
+            "Capture a heap dump.",
+            "Inspect object retention.",
+            "Review cache configuration.",
+            "Restart unhealthy pods.",
+          ],
+          automation: "kubectl rollout restart deployment aiops-playbook",
+        });
+        break;
+
+      case "CPU Saturation":
+        addRecommendation({
+          priority: "Critical",
+          issue: "CPU Saturation",
+          actions: [
+            "Inspect CPU-intensive requests.",
+            "Review recent deployments.",
+            "Scale the deployment if necessary.",
+            "Profile application performance.",
+          ],
+          automation: "kubectl scale deployment aiops-playbook --replicas=3",
+        });
+        break;
+
+      case "High Latency":
+        addRecommendation({
           priority: "High",
-          issue: cause.title,
-          action:
-            "Verify OpenTelemetry SDK initialization and ensure traces are exported to Tempo.",
+          issue: "High Latency",
+          actions: [
+            "Inspect slow traces in Tempo.",
+            "Identify slow endpoints.",
+            "Review database queries.",
+            "Check upstream service dependencies.",
+          ],
+        });
+        break;
+
+      case "Tracing Missing":
+        addRecommendation({
+          priority: "High",
+          issue: "Tracing Missing",
+          actions: [
+            "Verify OpenTelemetry SDK initialization.",
+            "Verify Collector connectivity.",
+            "Confirm Tempo is receiving traces.",
+          ],
           automation:
             "kubectl logs deployment/aiops-playbook | grep OpenTelemetry",
         });
         break;
-
-      case "Log Explosion":
-        recommendations.push({
-          priority: "Medium",
-          issue: cause.title,
-          action:
-            "Inspect repetitive errors in Loki and reduce unnecessary log verbosity.",
-          automation: "logcli query '{app=\"aiops-playbook\"}' --limit=100",
-        });
-        break;
-
-      default:
-        recommendations.push({
-          priority: "Low",
-          issue: cause.title,
-          action: cause.recommendation,
-        });
     }
   }
 
   for (const correlation of correlations) {
-    recommendations.push({
+    addRecommendation({
       priority: correlation.severity,
       issue: correlation.issue,
-      action: correlation.evidence.join(". "),
+      actions: correlation.evidence,
     });
   }
 
   for (const prediction of predictions) {
-    if (prediction.risk === "High") {
-      recommendations.push({
-        priority: "High",
-        issue: `${prediction.metric} forecast`,
-        action: prediction.message,
-      });
-    }
-
-    if (prediction.risk === "Critical") {
-      recommendations.push({
-        priority: "Critical",
-        issue: `${prediction.metric} forecast`,
-        action: prediction.message,
+    if (
+      prediction.risk === "High" ||
+      prediction.risk === "Critical"
+    ) {
+      addRecommendation({
+        priority: prediction.risk,
+        issue: `${prediction.metric ?? "System"} Forecast`,
+        actions: [
+          prediction.message,
+          prediction.risk === "Critical"
+            ? "Take preventative action immediately."
+            : "Monitor this trend closely.",
+          "Review capacity planning.",
+        ],
       });
     }
   }
 
-  return recommendations.filter(
-    (item, index, self) =>
-      index === self.findIndex((r) => r.issue === item.issue),
+  return Array.from(recommendations.values()).sort(
+    (a, b) => priorityWeight(b.priority) - priorityWeight(a.priority),
   );
+}
+
+function priorityWeight(priority: Recommendation["priority"]): number {
+  switch (priority) {
+    case "Critical":
+      return 4;
+    case "High":
+      return 3;
+    case "Medium":
+      return 2;
+    case "Low":
+      return 1;
+    default:
+      return 0;
+  }
 }

@@ -1,120 +1,134 @@
 import { collectTelemetry } from "./collectors/telemetryCollector";
-
 import { analyze } from "./analyzers/healthAnalyzer";
-import { analyzeEvents } from "./analyzers/eventAnalyzer";
-import { detectRootCause } from "./analyzers/rootCauseAnalyzer";
-
-import { correlate } from "./engines/correlationEngine";
-import { correlateEvents } from "./engines/eventCorrelationEngine";
-import { predict } from "./engines/predictionEngine";
-import { scoreIncident } from "./engines/incidentScoringEngine";
-import { recommend } from "./engines/recommendationEngine";
-import { buildIncidentReport } from "./engines/reportEngine";
-import { classifyIncident } from "./engines/classificationEngine";
-import { buildTimeline } from "./timeline/incidentTimeline";
+import { generateIncidentReport } from "./engines/generateIncidentReport";
 
 async function main() {
-  console.log("Collecting telemetry...");
+  console.log("\n=====================================");
+  console.log("      AIOps Incident Detection");
+  console.log("=====================================\n");
+
+  console.log("Collecting telemetry...\n");
 
   const telemetry = await collectTelemetry();
 
-  console.log("TELEMETRY");
-  console.dir(telemetry, { depth: null });
+  console.log("Telemetry collected successfully.\n");
 
-  const health = analyze(telemetry);
+  const health = analyze({
+    ...telemetry,
+    events: telemetry.events,
+  });
 
-  console.log("HEALTH");
-  console.dir(health, { depth: null });
+  console.log("Health analysis complete.\n");
 
-  console.log("TRENDS");
-  console.dir(telemetry.trends, { depth: null });
+const report = generateIncidentReport({
+  health,
+  telemetry,
+});
 
-  const eventFindings = analyzeEvents(telemetry.events);
+  console.log("=====================================");
+  console.log("INCIDENT SUMMARY");
+  console.log("=====================================");
 
-  console.log("EVENT ANALYSIS");
-  console.dir(eventFindings, { depth: null });
+  console.table([
+    {
+      Score: report.summary.score,
+      Level: report.summary.level,
+      Healthy: report.summary.healthy,
+    },
+  ]);
 
-  const causes = detectRootCause(
-    health,
-    telemetry.trends,
-    telemetry.logs,
-    telemetry.traces,
+  console.log("\n=====================================");
+  console.log("ROOT CAUSE");
+  console.log("=====================================");
+
+  if (report.rootCause) {
+    console.table([
+      {
+        Category: report.rootCause.category,
+        Subcategory: report.rootCause.subcategory,
+        Confidence: `${report.rootCause.confidence}%`,
+      },
+    ]);
+
+    console.log("\nEvidence:");
+
+    report.rootCause.evidence.forEach((e) => {
+      console.log(` • ${e}`);
+    });
+  } else {
+    console.log("No root cause detected.");
+  }
+
+  console.log("\n=====================================");
+  console.log("CORRELATIONS");
+  console.log("=====================================");
+
+  console.table(
+    report.correlations.map((finding) => ({
+      Severity: finding.severity,
+      Issue: finding.issue,
+      Evidence: finding.evidence.join(", "),
+    })),
   );
 
-  console.log("ROOT CAUSES");
-  console.dir(causes, { depth: null });
-
-  const metricCorrelations = correlate({
-    health,
-    metrics: telemetry.metrics,
-    trends: telemetry.trends,
-    logs: telemetry.logs,
-    traces: telemetry.traces,
-    events: eventFindings,
-  });
-
-  const eventCorrelations = correlateEvents(telemetry.events);
-
-  const correlations = [...metricCorrelations, ...eventCorrelations];
-
-  console.log("CORRELATIONS");
-  console.dir(correlations, { depth: null });
-
-  const predictions = predict({
-    health,
-    trends: telemetry.trends,
-    correlations,
-  });
-
+  console.log("\n=====================================");
   console.log("PREDICTIONS");
-  console.dir(predictions, { depth: null });
+  console.log("=====================================");
 
-  const incident = scoreIncident({
-    health,
-    correlations,
-    predictions,
-  });
+  console.table(
+    report.predictions.map((prediction) => ({
+      Risk: prediction.risk,
+      Probability: `${Math.round(prediction.probability * 100)}%`,
+      Message: prediction.message,
+    })),
+  );
 
-  console.log("INCIDENT SCORE");
-  console.dir(incident, { depth: null });
-
-  const recommendations = recommend(causes, correlations, predictions);
-
+  console.log("\n=====================================");
   console.log("RECOMMENDATIONS");
-  console.dir(recommendations, { depth: null });
+  console.log("=====================================");
 
-  const classification = classifyIncident({
-    causes,
-    correlations,
-    events: eventFindings,
+  report.recommendations.forEach((recommendation) => {
+    console.log(`\n[${recommendation.priority}] ${recommendation.issue}`);
+
+    recommendation.actions.forEach((action, index) => {
+      console.log(`  ${index + 1}. ${action}`);
+    });
+
+    if (recommendation.automation) {
+      console.log(`\n  Automation:`);
+      console.log(`  ${recommendation.automation}`);
+    }
   });
 
-  console.log("\nINCIDENT CLASSIFICATION");
-  console.dir(classification, { depth: null });
+  console.log("\n=====================================");
+  console.log("INCIDENT TIMELINE");
+  console.log("=====================================");
 
-  const report = buildIncidentReport({
-    telemetry,
-    health,
-    causes,
-    correlations,
-    predictions,
-    recommendations,
-    incident,
+  console.table(
+    report.timeline.map((entry) => ({
+      Time: entry.timestamp,
+      Source: entry.source,
+      Severity: entry.severity,
+      Title: entry.title,
+    })),
+  );
+
+  console.log("\n=====================================");
+  console.log("FULL INCIDENT REPORT");
+  console.log("=====================================\n");
+
+  console.dir(report, {
+    depth: null,
+    colors: true,
   });
 
-  console.dir(report, { depth: null });
-
-  const timeline = buildTimeline(
-    telemetry,
-    health,
-    correlations,
-    predictions
-);
-
-console.log("\nINCIDENT TIMELINE");
-console.table(timeline);
-
-  console.log("PIPELINE COMPLETE");
+  console.log("\n=====================================");
+  console.log("PIPELINE COMPLETED SUCCESSFULLY");
+  console.log("=====================================\n");
 }
 
-main().catch(console.error);
+main().catch((err) => {
+  console.error("\nPipeline failed.\n");
+  console.error(err);
+  process.exit(1);
+});

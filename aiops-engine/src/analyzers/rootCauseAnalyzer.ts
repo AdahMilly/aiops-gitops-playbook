@@ -9,27 +9,57 @@ export function detectRootCause(
   trends: any,
   logs: any[],
   traces: any[],
+  events: any[],
 ): RootCause[] {
   const causes: RootCause[] = [];
 
   const cpu = Number.parseFloat(health.cpu);
   const memory = Number.parseFloat(health.memory);
 
+  const livenessFailure = events.find(
+    (e: any) =>
+      e.reason === "Unhealthy" && e.message?.toLowerCase().includes("liveness"),
+  );
+
+  if (livenessFailure) {
+    causes.push({
+      title: "Liveness Probe Failure",
+      confidence: 99,
+      recommendation:
+        "Application failed Kubernetes liveness checks. Inspect application startup time, HTTP health endpoint, container logs, and recent deployments.",
+    });
+  }
+
+  const readinessFailure = events.find(
+    (e: any) =>
+      e.reason === "Unhealthy" &&
+      e.message?.toLowerCase().includes("readiness"),
+  );
+
+  if (readinessFailure) {
+    causes.push({
+      title: "Readiness Probe Failure",
+      confidence: 98,
+      recommendation:
+        "Application is not becoming ready. Verify dependencies such as databases, APIs, startup initialization, and readiness endpoint configuration.",
+    });
+  }
+
   if (cpu > 80) {
     causes.push({
       title: "High CPU Usage",
       confidence: trends.cpu.trend === "rising" ? 98 : 90,
       recommendation:
-        "Inspect recent deployments, expensive requests and hot endpoints.",
+        "Inspect expensive requests, hot endpoints, background jobs, and recent deployments.",
     });
   }
 
   if (memory > 400) {
     causes.push({
       title: "High Memory Usage",
-      confidence: trends.memory.trend === "rising" ? 95 : 85,
+      confidence: trends.memory.trend === "rising" ? 96 : 88,
       recommendation:
-        "Inspect heap usage, object retention and restart unhealthy pods.",
+        "Inspect heap usage, memory allocations, caches, and restart unhealthy pods if required.",
     });
   }
 
@@ -38,7 +68,7 @@ export function detectRootCause(
       title: "Possible Memory Leak",
       confidence: 92,
       recommendation:
-        "Memory keeps increasing while CPU remains stable. Inspect long-lived objects or caches.",
+        "Memory continues increasing while CPU remains stable. Investigate object retention, caches, and long-lived sessions.",
     });
   }
 
@@ -47,7 +77,7 @@ export function detectRootCause(
       title: "CPU Saturation Trend",
       confidence: 88,
       recommendation:
-        "Recent traffic or deployment may be increasing CPU consumption.",
+        "CPU has been steadily increasing. Investigate workload spikes or inefficient application code.",
     });
   }
 
@@ -61,7 +91,7 @@ export function detectRootCause(
       title: "Log Explosion",
       confidence: 80,
       recommendation:
-        "Inspect repeated errors or stack traces flooding the logs.",
+        "Large log volume detected. Inspect repeated exceptions or excessive logging.",
     });
   }
 
@@ -70,7 +100,7 @@ export function detectRootCause(
       title: "Tracing Missing",
       confidence: 100,
       recommendation:
-        "Verify OpenTelemetry instrumentation and collector connectivity.",
+        "No distributed traces were collected. Verify OpenTelemetry instrumentation and collector connectivity.",
     });
   }
 
@@ -80,7 +110,16 @@ export function detectRootCause(
     causes.push({
       title: "Slow Request Detected",
       confidence: 90,
-      recommendation: `Trace ${slowTrace.traceID} took ${slowTrace.durationMs} ms. Inspect this request in Tempo.`,
+      recommendation: `Trace ${slowTrace.traceID} took ${slowTrace.durationMs} ms. Inspect the trace in Tempo to identify latency bottlenecks.`,
+    });
+  }
+
+  if (causes.length === 0) {
+    causes.push({
+      title: "No Root Cause Identified",
+      confidence: 100,
+      recommendation:
+        "No infrastructure, application, or Kubernetes issues were detected. Continue monitoring.",
     });
   }
 
