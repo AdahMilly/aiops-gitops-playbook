@@ -17,17 +17,21 @@ interface CorrelationInput {
     memory: string;
     healthy: boolean;
   };
+
   metrics: {
     cpu: number;
     memory: number;
   };
+
   trends: {
     cpu: Trend;
     memory: Trend;
   };
+
   logs: {
     values?: string[][];
   }[];
+
   traces: {
     durationMs: number;
   }[];
@@ -112,10 +116,16 @@ export function correlate(data: CorrelationInput): CorrelationFinding[] {
     });
   }
 
-  for (const incident of data.incidents) {
+  const activeIncidents = data.incidents.filter(
+    (incident) => incident.status === "Active",
+  );
+
+  for (const incident of activeIncidents) {
     findings.push({
       severity: incident.severity,
+
       issue: incident.title,
+
       evidence:
         incident.evidence.length > 0
           ? incident.evidence
@@ -129,7 +139,8 @@ export function correlate(data: CorrelationInput): CorrelationFinding[] {
     (item, index, self) =>
       index ===
       self.findIndex(
-        (f) => f.issue === item.issue && f.severity === item.severity,
+        (finding) =>
+          finding.issue === item.issue && finding.severity === item.severity,
       ),
   );
 
@@ -147,6 +158,7 @@ export function correlate(data: CorrelationInput): CorrelationFinding[] {
         "Memory normal",
         "Tracing available",
         "No abnormal trends",
+        "No active incidents",
       ],
     });
   }

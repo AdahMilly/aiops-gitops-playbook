@@ -9,6 +9,8 @@ export type IncidentCategory =
   | "Security"
   | "Unknown";
 
+export type IncidentStatus = "Active" | "Historical";
+
 export interface Incident {
   id: string;
 
@@ -19,6 +21,8 @@ export interface Incident {
   severity: IncidentSeverity;
 
   confidence: number;
+
+  status: IncidentStatus;
 
   rootCause?: string;
 
