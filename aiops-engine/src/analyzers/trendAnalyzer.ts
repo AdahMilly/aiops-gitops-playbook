@@ -1,22 +1,48 @@
-type TimeSeriesPoint = [number, string];
+export type TrendDirection = "rising" | "falling" | "stable";
 
 export interface TrendAnalysis {
-  trend: "rising" | "falling" | "stable" | "unknown";
+  trend: TrendDirection;
+
   slope: number;
+
   first: number;
+
   current: number;
+
   average: number;
+
   minimum: number;
+
   maximum: number;
+
   change: number;
+
   anomaly: boolean;
+
   findings: string[];
 }
 
-export function analyzeTrend(series: TimeSeriesPoint[]): TrendAnalysis {
-  if (!series.length) {
+interface TrendOptions {
+  significantChangePercent?: number;
+  spikeThresholdPercent?: number;
+  minimumPoints?: number;
+}
+
+export function analyzeTrend(
+  values: number[],
+  options: TrendOptions = {},
+): TrendAnalysis {
+  const {
+    significantChangePercent = 20,
+    spikeThresholdPercent = 50,
+    minimumPoints = 3,
+  } = options;
+
+  const cleaned = values.filter((value) => Number.isFinite(value));
+
+  if (!cleaned.length) {
     return {
-      trend: "unknown",
+      trend: "stable",
       slope: 0,
       first: 0,
       current: 0,
@@ -29,46 +55,58 @@ export function analyzeTrend(series: TimeSeriesPoint[]): TrendAnalysis {
     };
   }
 
-  const values = series.map(([, value]) => Number(value));
+  const first = cleaned[0];
+  const current = cleaned[cleaned.length - 1];
 
-  const first = values[0];
-  const current = values.at(-1)!;
+  const minimum = Math.min(...cleaned);
+  const maximum = Math.max(...cleaned);
 
-  const minimum = Math.min(...values);
-  const maximum = Math.max(...values);
+  const average =
+    cleaned.reduce((sum, value) => sum + value, 0) / cleaned.length;
 
-  const average = values.reduce((sum, value) => sum + value, 0) / values.length;
+  const change = first === 0 ? 0 : ((current - first) / Math.abs(first)) * 100;
 
-  const slope = current - first;
+  let trend: TrendDirection = "stable";
 
-  const change = first === 0 ? 0 : ((current - first) / first) * 100;
+  if (change > 5) {
+    trend = "rising";
+  } else if (change < -5) {
+    trend = "falling";
+  }
 
-  let trend: TrendAnalysis["trend"] = "stable";
-
-  if (slope > 0.02) trend = "rising";
-  else if (slope < -0.02) trend = "falling";
+  const slope = calculateSlope(cleaned);
 
   const findings: string[] = [];
 
-  if (change > 50) {
+  if (Math.abs(change) >= significantChangePercent) {
+    if (change > 0) {
+      findings.push(
+        `Metric increased by ${change.toFixed(1)}% over the selected period.`,
+      );
+    } else {
+      findings.push(
+        `Metric decreased by ${Math.abs(change).toFixed(1)}% over the selected period.`,
+      );
+    }
+  }
+
+  const hasSpike =
+    cleaned.length >= minimumPoints &&
+    average > 0 &&
+    maximum > average * (1 + spikeThresholdPercent / 100);
+
+  if (hasSpike) {
     findings.push(
-      `Metric increased by ${change.toFixed(1)}% over the selected period.`,
+      `Metric spike detected: maximum ${formatValue(
+        maximum,
+      )} is significantly above the average ${formatValue(average)}.`,
     );
   }
 
-  if (change < -50) {
-    findings.push(
-      `Metric decreased by ${Math.abs(change).toFixed(1)}% over the selected period.`,
-    );
-  }
+  const risingSignificantly =
+    trend === "rising" && change >= significantChangePercent;
 
-  if (maximum > average * 2) {
-    findings.push("Significant spike detected.");
-  }
-
-  if (minimum < average * 0.5) {
-    findings.push("Significant drop detected.");
-  }
+  const anomaly = hasSpike || risingSignificantly;
 
   return {
     trend,
@@ -79,7 +117,46 @@ export function analyzeTrend(series: TimeSeriesPoint[]): TrendAnalysis {
     minimum,
     maximum,
     change,
-    anomaly: findings.length > 0,
+    anomaly,
     findings,
   };
+}
+
+function calculateSlope(values: number[]): number {
+  if (values.length < 2) {
+    return 0;
+  }
+
+  const n = values.length;
+
+  let sumX = 0;
+  let sumY = 0;
+  let sumXY = 0;
+  let sumXX = 0;
+
+  for (let i = 0; i < n; i++) {
+    const x = i;
+    const y = values[i];
+
+    sumX += x;
+    sumY += y;
+    sumXY += x * y;
+    sumXX += x * x;
+  }
+
+  const denominator = n * sumXX - sumX * sumX;
+
+  if (denominator === 0) {
+    return 0;
+  }
+
+  return (n * sumXY - sumX * sumY) / denominator;
+}
+
+function formatValue(value: number): string {
+  if (Math.abs(value) < 1) {
+    return value.toFixed(4);
+  }
+
+  return value.toFixed(2);
 }

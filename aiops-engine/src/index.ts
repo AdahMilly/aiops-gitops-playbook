@@ -13,29 +13,24 @@ async function main() {
 
   console.log("Telemetry collected successfully.\n");
 
-  const health = analyze({
-    ...telemetry,
-    events: telemetry.events,
-  });
+  const health = analyze(telemetry);
 
   console.log("Health analysis complete.\n");
 
-const report = generateIncidentReport({
-  health,
-  telemetry,
-});
+  const report = generateIncidentReport({
+    health,
+    telemetry,
+  });
 
   console.log("=====================================");
   console.log("INCIDENT SUMMARY");
   console.log("=====================================");
 
-  console.table([
-    {
-      Score: report.summary.score,
-      Level: report.summary.level,
-      Healthy: report.summary.healthy,
-    },
-  ]);
+  console.table({
+    Score: report.summary.score,
+    Level: report.summary.level,
+    Healthy: report.summary.healthy,
+  });
 
   console.log("\n=====================================");
   console.log("ROOT CAUSE");
@@ -56,10 +51,50 @@ const report = generateIncidentReport({
       console.log(` • ${e}`);
     });
   } else {
-    console.log("No root cause detected.");
+    console.log("No root cause identified.");
   }
 
   console.log("\n=====================================");
+  console.log("INCIDENT GROUPS");
+  console.log("=====================================");
+
+  report.incidentGroups.forEach((group, index) => {
+    console.log(`\nIncident ${index + 1}`);
+
+    console.table([
+      {
+        Title: group.title,
+        Category: group.category,
+        Severity: group.severity,
+        Findings: group.findings.length,
+        Pods: group.affectedPods.length,
+      },
+    ]);
+
+    console.log("\nFindings:");
+
+    group.findings.forEach((finding) => {
+      console.log(` • ${finding.issue} (${finding.severity})`);
+    });
+
+    console.log("\nEvidence:");
+
+    group.evidence.forEach((e) => {
+      console.log(` • ${e}`);
+    });
+
+    if (group.affectedPods.length) {
+      console.log("\nAffected Pods:");
+
+      group.affectedPods.forEach((pod) => {
+        console.log(` • ${pod}`);
+      });
+    }
+
+    console.log("");
+  });
+
+  console.log("=====================================");
   console.log("CORRELATIONS");
   console.log("=====================================");
 
@@ -95,8 +130,7 @@ const report = generateIncidentReport({
     });
 
     if (recommendation.automation) {
-      console.log(`\n  Automation:`);
-      console.log(`  ${recommendation.automation}`);
+      console.log(`\n  Automation:\n  ${recommendation.automation}`);
     }
   });
 
@@ -117,18 +151,15 @@ const report = generateIncidentReport({
   console.log("FULL INCIDENT REPORT");
   console.log("=====================================\n");
 
-  console.dir(report, {
-    depth: null,
-    colors: true,
-  });
+  console.dir(report, { depth: null });
 
   console.log("\n=====================================");
   console.log("PIPELINE COMPLETED SUCCESSFULLY");
   console.log("=====================================\n");
 }
 
-main().catch((err) => {
+main().catch((error) => {
   console.error("\nPipeline failed.\n");
-  console.error(err);
+  console.error(error);
   process.exit(1);
 });

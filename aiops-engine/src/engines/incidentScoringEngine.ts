@@ -12,6 +12,7 @@ export interface TrendSummary {
   cpu?: {
     anomaly: boolean;
   };
+
   memory?: {
     anomaly: boolean;
   };
@@ -19,8 +20,11 @@ export interface TrendSummary {
 
 export interface IncidentScore {
   score: number;
+
   level: "Healthy" | "Warning" | "Major" | "Critical";
+
   reasons: string[];
+
   breakdown: {
     health: number;
     rootCause: number;
@@ -37,153 +41,42 @@ interface IncidentScoreInput {
   predictions: Prediction[];
   trends?: TrendSummary;
 }
+const SCORE_LIMITS = {
+  health: 30,
+  rootCause: 25,
+  incidents: 20,
+  predictions: 15,
+  trends: 10,
+} as const;
 
 export function scoreIncident(data: IncidentScoreInput): IncidentScore {
-  let healthScore = 0;
-  let rootCauseScore = 0;
-  let incidentScore = 0;
-  let predictionScore = 0;
-  let trendScore = 0;
+  const reasons = new Set<string>();
 
-  const reasons: string[] = [];
+  const healthScore = calculateHealthScore(data.health, reasons);
 
-  if (!data.health.healthy) {
-    healthScore += 20;
-    reasons.push("Overall health degraded");
-  }
+  const rootCauseScore = calculateRootCauseScore(data.rootCause, reasons);
 
-  if (data.health.applicationHealthy === false) {
-    healthScore += 15;
-    reasons.push("Application unhealthy");
-  }
+  const incidentScore = calculateIncidentScore(data.correlations, reasons);
 
-  if (data.health.kubernetesHealthy === false) {
-    healthScore += 15;
-    reasons.push("Kubernetes unhealthy");
-  }
+  const predictionScore = calculatePredictionScore(data.predictions, reasons);
 
-  if (data.rootCause) {
-    reasons.push(data.rootCause.subcategory);
+  const trendScore = calculateTrendScore(data.trends, reasons);
 
-    switch (data.rootCause.category) {
-      case "Infrastructure":
-        rootCauseScore += 30;
-        break;
+  const score = Math.min(
+    SCORE_LIMITS.health +
+      SCORE_LIMITS.rootCause +
+      SCORE_LIMITS.incidents +
+      SCORE_LIMITS.predictions +
+      SCORE_LIMITS.trends,
+    healthScore + rootCauseScore + incidentScore + predictionScore + trendScore,
+  );
 
-      case "Application":
-        rootCauseScore += 25;
-        break;
-
-      case "Resource":
-        rootCauseScore += 20;
-        break;
-
-      case "Performance":
-        rootCauseScore += 15;
-        break;
-
-      case "Observability":
-        rootCauseScore += 10;
-        break;
-
-      default:
-        rootCauseScore += 5;
-    }
-
-    if (data.rootCause.confidence >= 95) {
-      rootCauseScore += 5;
-    }
-  }
-
-  const uniqueIssues = new Map<string, CorrelationFinding["severity"]>();
-
-  data.correlations.forEach((correlation) => {
-    const current = uniqueIssues.get(correlation.issue);
-
-    if (
-      !current ||
-      severityWeight(correlation.severity) > severityWeight(current)
-    ) {
-      uniqueIssues.set(correlation.issue, correlation.severity);
-    }
-  });
-
-  uniqueIssues.forEach((severity, issue) => {
-    switch (severity) {
-      case "Critical":
-        incidentScore += 20;
-        break;
-
-      case "High":
-        incidentScore += 12;
-        break;
-
-      case "Medium":
-        incidentScore += 6;
-        break;
-
-      case "Low":
-        incidentScore += 2;
-        break;
-    }
-
-    reasons.push(issue);
-  });
-
-  data.predictions.forEach((prediction) => {
-    switch (prediction.risk) {
-      case "Critical":
-        predictionScore += 20;
-        reasons.push(prediction.message);
-        break;
-
-      case "High":
-        predictionScore += 12;
-        reasons.push(prediction.message);
-        break;
-
-      case "Medium":
-        predictionScore += 6;
-        reasons.push(prediction.message);
-        break;
-
-      case "Low":
-        predictionScore += 1;
-        break;
-    }
-  });
-
-  if (data.trends?.cpu?.anomaly) {
-    trendScore += 5;
-    reasons.push("CPU anomaly detected");
-  }
-
-  if (data.trends?.memory?.anomaly) {
-    trendScore += 5;
-    reasons.push("Memory anomaly detected");
-  }
-
-  let score =
-    healthScore + rootCauseScore + incidentScore + predictionScore + trendScore;
-
-  score = Math.min(score, 100);
-
-  let level: IncidentScore["level"] = "Healthy";
-
-  if (score >= 80) {
-    level = "Critical";
-  } else if (score >= 50) {
-    level = "Major";
-  } else if (score >= 20) {
-    level = "Warning";
-  }
+  const level = getIncidentLevel(score);
 
   return {
     score,
     level,
-    reasons: reasons.filter(
-      (reason, index, self) => self.indexOf(reason) === index,
-    ),
+    reasons: Array.from(reasons),
     breakdown: {
       health: healthScore,
       rootCause: rootCauseScore,
@@ -193,16 +86,284 @@ export function scoreIncident(data: IncidentScoreInput): IncidentScore {
     },
   };
 }
+function calculateHealthScore(
+  health: HealthStatus,
+  reasons: Set<string>,
+): number {
+  let score = 0;
+
+  if (!health.healthy) {
+    score += 10;
+    reasons.add("Overall health degraded");
+  }
+
+  if (health.applicationHealthy === false) {
+    score += 10;
+    reasons.add("Application unhealthy");
+  }
+
+  if (health.kubernetesHealthy === false) {
+    score += 10;
+    reasons.add("Kubernetes unhealthy");
+  }
+
+  return Math.min(score, SCORE_LIMITS.health);
+}
+
+function calculateRootCauseScore(
+  rootCause: RootCauseAnalysis | null,
+  reasons: Set<string>,
+): number {
+  if (!rootCause) {
+    return 0;
+  }
+
+  reasons.add(rootCause.subcategory);
+
+  const categoryWeight = getRootCauseWeight(rootCause.category);
+
+  const confidenceMultiplier = clamp(rootCause.confidence / 100, 0, 1);
+
+  return Math.round(
+    Math.min(categoryWeight * confidenceMultiplier, SCORE_LIMITS.rootCause),
+  );
+}
+
+function getRootCauseWeight(category: RootCauseAnalysis["category"]): number {
+  switch (category) {
+    case "Infrastructure":
+      return 25;
+
+    case "Application":
+      return 22;
+
+    case "Resource":
+      return 20;
+
+    case "Performance":
+      return 16;
+
+    case "Observability":
+      return 10;
+
+    default:
+      return 5;
+  }
+}
+
+function calculateIncidentScore(
+  correlations: CorrelationFinding[],
+  reasons: Set<string>,
+): number {
+  const uniqueIssues = new Map<string, CorrelationFinding["severity"]>();
+
+  for (const correlation of correlations) {
+    const currentSeverity = uniqueIssues.get(correlation.issue);
+
+    if (
+      !currentSeverity ||
+      severityWeight(correlation.severity) > severityWeight(currentSeverity)
+    ) {
+      uniqueIssues.set(correlation.issue, correlation.severity);
+    }
+  }
+
+  const issueScores = Array.from(uniqueIssues.entries())
+    .map(([issue, severity]) => ({
+      issue,
+      severity,
+      score: incidentSeverityScore(severity),
+    }))
+    .sort((a, b) => b.score - a.score);
+
+  let score = 0;
+
+  for (const incident of issueScores.slice(0, 4)) {
+    score += incident.score;
+
+    reasons.add(incident.issue);
+
+    const index = issueScores.indexOf(incident);
+
+    if (index > 0) {
+      score -= incident.score * diminishingReturn(index);
+    }
+  }
+
+  return Math.round(Math.min(score, SCORE_LIMITS.incidents));
+}
+
+function incidentSeverityScore(
+  severity: CorrelationFinding["severity"],
+): number {
+  switch (severity) {
+    case "Critical":
+      return 15;
+
+    case "High":
+      return 10;
+
+    case "Medium":
+      return 6;
+
+    case "Low":
+      return 2;
+
+    default:
+      return 0;
+  }
+}
+
+function diminishingReturn(index: number): number {
+  switch (index) {
+    case 1:
+      return 0.25;
+
+    case 2:
+      return 0.5;
+
+    case 3:
+      return 0.75;
+
+    default:
+      return 0.9;
+  }
+}
+
+function calculatePredictionScore(
+  predictions: Prediction[],
+  reasons: Set<string>,
+): number {
+  if (!predictions.length) {
+    return 0;
+  }
+
+  const validPredictions = predictions.filter(
+    (
+      prediction,
+    ): prediction is Prediction & {
+      metric: string;
+      probability: number;
+    } =>
+      typeof prediction.metric === "string" &&
+      prediction.metric.length > 0 &&
+      typeof prediction.probability === "number" &&
+      Number.isFinite(prediction.probability),
+  );
+
+  if (!validPredictions.length) {
+    return 0;
+  }
+
+  const highestRiskByMetric = new Map<
+    string,
+    (typeof validPredictions)[number]
+  >();
+
+  for (const prediction of validPredictions) {
+    const existing = highestRiskByMetric.get(prediction.metric);
+
+    if (
+      !existing ||
+      predictionRiskWeight(prediction.risk) >
+        predictionRiskWeight(existing.risk)
+    ) {
+      highestRiskByMetric.set(prediction.metric, prediction);
+    }
+  }
+
+  let score = 0;
+
+  for (const prediction of highestRiskByMetric.values()) {
+    const probability = clamp(prediction.probability, 0, 1);
+
+    const riskScore = predictionRiskWeight(prediction.risk) * probability;
+
+    score += riskScore;
+
+    reasons.add(prediction.message);
+  }
+
+  return Math.round(Math.min(score, SCORE_LIMITS.predictions));
+}
+
+function predictionRiskWeight(risk: Prediction["risk"]): number {
+  switch (risk) {
+    case "Critical":
+      return 10;
+
+    case "High":
+      return 8;
+
+    case "Medium":
+      return 5;
+
+    case "Low":
+      return 2;
+
+    default:
+      return 0;
+  }
+}
+
+function calculateTrendScore(
+  trends: TrendSummary | undefined,
+  reasons: Set<string>,
+): number {
+  if (!trends) {
+    return 0;
+  }
+
+  let score = 0;
+
+  if (trends.cpu?.anomaly) {
+    score += 5;
+    reasons.add("CPU anomaly detected");
+  }
+
+  if (trends.memory?.anomaly) {
+    score += 5;
+    reasons.add("Memory anomaly detected");
+  }
+
+  return Math.min(score, SCORE_LIMITS.trends);
+}
+
+function getIncidentLevel(score: number): IncidentScore["level"] {
+  if (score >= 80) {
+    return "Critical";
+  }
+
+  if (score >= 50) {
+    return "Major";
+  }
+
+  if (score >= 20) {
+    return "Warning";
+  }
+
+  return "Healthy";
+}
 
 function severityWeight(severity: CorrelationFinding["severity"]): number {
   switch (severity) {
     case "Critical":
       return 4;
+
     case "High":
       return 3;
+
     case "Medium":
       return 2;
+
     case "Low":
       return 1;
+
+    default:
+      return 0;
   }
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
 }

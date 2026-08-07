@@ -14,8 +14,18 @@ export function findRootCause(
     return null;
   }
 
-  const nodeFailure = findings.find(
-    (f) => f.issue === "NodeNotReady" || f.issue === "Cluster node unavailable",
+  const actionableFindings = findings.filter(
+    (finding) => finding.issue !== "System Healthy",
+  );
+
+  if (actionableFindings.length === 0) {
+    return null;
+  }
+
+  const nodeFailure = actionableFindings.find(
+    (finding) =>
+      finding.issue === "NodeNotReady" ||
+      finding.issue === "Cluster node unavailable",
   );
 
   if (nodeFailure) {
@@ -27,7 +37,13 @@ export function findRootCause(
     };
   }
 
-  const unhealthy = findings.find((f) => f.issue === "Unhealthy");
+  const unhealthy = actionableFindings.find(
+    (finding) =>
+      finding.issue === "Unhealthy" ||
+      finding.issue.toLowerCase().includes("health check") ||
+      finding.issue.toLowerCase().includes("probe") ||
+      finding.issue.toLowerCase().includes("crashloop"),
+  );
 
   if (unhealthy) {
     return {
@@ -38,7 +54,11 @@ export function findRootCause(
     };
   }
 
-  const memory = findings.find((f) => f.issue.toLowerCase().includes("memory"));
+  const memory = actionableFindings.find(
+    (finding) =>
+      finding.issue.toLowerCase().includes("memory") ||
+      finding.issue.toLowerCase().includes("oom"),
+  );
 
   if (memory) {
     return {
@@ -49,7 +69,9 @@ export function findRootCause(
     };
   }
 
-  const cpu = findings.find((f) => f.issue.toLowerCase().includes("cpu"));
+  const cpu = actionableFindings.find((finding) =>
+    finding.issue.toLowerCase().includes("cpu"),
+  );
 
   if (cpu) {
     return {
@@ -59,7 +81,12 @@ export function findRootCause(
       evidence: cpu.evidence,
     };
   }
-  const latency = findings.find((f) => f.issue.toLowerCase().includes("slow"));
+
+  const latency = actionableFindings.find((finding) => {
+    const issue = finding.issue.toLowerCase();
+
+    return issue.includes("slow") || issue.includes("latency");
+  });
 
   if (latency) {
     return {
@@ -69,9 +96,12 @@ export function findRootCause(
       evidence: latency.evidence,
     };
   }
-  const tracing = findings.find((f) =>
-    f.issue.toLowerCase().includes("tracing"),
-  );
+
+  const tracing = actionableFindings.find((finding) => {
+    const issue = finding.issue.toLowerCase();
+
+    return issue.includes("tracing") || issue.includes("trace");
+  });
 
   if (tracing) {
     return {
@@ -81,6 +111,7 @@ export function findRootCause(
       evidence: tracing.evidence,
     };
   }
+
   const severityOrder: Record<CorrelationFinding["severity"], number> = {
     Critical: 4,
     High: 3,
@@ -88,7 +119,7 @@ export function findRootCause(
     Low: 1,
   };
 
-  const highest = [...findings].sort(
+  const highest = [...actionableFindings].sort(
     (a, b) => severityOrder[b.severity] - severityOrder[a.severity],
   )[0];
 

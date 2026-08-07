@@ -9,7 +9,13 @@ import { recommend, Recommendation } from "./recommendationEngine";
 import { scoreIncident, IncidentScore } from "./incidentScoringEngine";
 
 import { buildTimeline, TimelineEntry } from "./timelineEngine";
+
 import { mapIncidents } from "../incident/incidentMapper";
+
+import {
+  deduplicateIncidents,
+  IncidentGroup,
+} from "./incidentDeduplicationEngine";
 
 interface GenerateIncidentReportInput {
   health: any;
@@ -31,6 +37,8 @@ export interface IncidentReport {
 
   rootCause: RootCauseAnalysis | null;
 
+  incidentGroups: IncidentGroup[];
+
   correlations: CorrelationFinding[];
 
   predictions: Prediction[];
@@ -43,39 +51,61 @@ export interface IncidentReport {
 export function generateIncidentReport(
   input: GenerateIncidentReportInput,
 ): IncidentReport {
-  const incidents = mapIncidents(input.telemetry.events);
+  const incidents = mapIncidents(input.telemetry.events ?? []);
+
   const correlations = correlate({
     health: input.health,
+
     metrics: input.telemetry.metrics,
+
     trends: input.telemetry.trends,
-    logs: input.telemetry.logs,
-    traces: input.telemetry.traces,
+
+    logs: input.telemetry.logs ?? [],
+
+    traces: input.telemetry.traces ?? [],
+
     incidents,
   });
+
+  const actionableCorrelations = correlations.filter(
+    (finding) => finding.issue !== "System Healthy",
+  );
+
+  const incidentGroups = deduplicateIncidents(actionableCorrelations);
 
   const rootCause = findRootCause(correlations);
 
   const predictions = predict({
     health: input.health,
+
     trends: input.telemetry.trends,
+
     correlations,
+
     rootCause,
   });
 
-  const recommendations = recommend(rootCause, correlations, predictions);
+  const recommendations = recommend(rootCause, incidentGroups, predictions);
 
   const score = scoreIncident({
     health: input.health,
+
     correlations,
+
     predictions,
+
     trends: input.telemetry.trends,
+
     rootCause,
   });
 
   const timeline = buildTimeline({
     health: input.health,
+
     correlations,
+
     predictions,
+
     incidents,
   });
 
@@ -84,7 +114,9 @@ export function generateIncidentReport(
 
     summary: {
       score: score.score,
+
       level: score.level,
+
       healthy: input.health.healthy,
     },
 
@@ -93,6 +125,8 @@ export function generateIncidentReport(
     trends: input.telemetry.trends,
 
     rootCause,
+
+    incidentGroups,
 
     correlations,
 
