@@ -18,6 +18,7 @@ export interface TelemetryEvent {
     namespace?: string;
   };
 }
+
 export interface CurrentKubernetesState {
   nodeReady?: boolean;
 
@@ -49,10 +50,12 @@ export interface Telemetry {
 
 export type FindingStatus = "Active" | "Historical";
 
+export type FindingSeverity = "Low" | "Medium" | "High" | "Critical";
+
 export interface DetailedFinding {
   issue: string;
 
-  severity: "Low" | "Medium" | "High" | "Critical";
+  severity: FindingSeverity;
 
   status: FindingStatus;
 
@@ -63,13 +66,16 @@ export interface DetailedFinding {
   timestamp?: string;
 }
 
+export type HealthStatus = "Healthy" | "Degraded" | "Incident";
+
 export interface HealthReport {
   cpu: string;
   memory: string;
-
   healthy: boolean;
+  status: HealthStatus;
 
   applicationHealthy: boolean;
+
   kubernetesHealthy: boolean;
 
   findings: string[];
@@ -78,6 +84,7 @@ export interface HealthReport {
 }
 
 const CPU_WARNING_THRESHOLD = 80;
+
 const MEMORY_WARNING_THRESHOLD_MB = 400;
 
 export function analyze(telemetry: Telemetry): HealthReport {
@@ -90,6 +97,7 @@ export function analyze(telemetry: Telemetry): HealthReport {
   const detailedFindings: DetailedFinding[] = [];
 
   let applicationHealthy = true;
+
   let kubernetesHealthy = true;
 
   if (cpuUsage > CPU_WARNING_THRESHOLD) {
@@ -97,10 +105,15 @@ export function analyze(telemetry: Telemetry): HealthReport {
 
     detailedFindings.push({
       issue: "HighCPU",
+
       severity: cpuUsage > 95 ? "Critical" : "High",
+
       status: "Active",
+
       source: "Metrics",
+
       evidence: [`CPU usage is ${cpuUsage.toFixed(2)}%`],
+
       timestamp: telemetry.timestamp,
     });
   }
@@ -110,10 +123,15 @@ export function analyze(telemetry: Telemetry): HealthReport {
 
     detailedFindings.push({
       issue: "HighMemory",
+
       severity: memoryMB > 500 ? "Critical" : "High",
+
       status: "Active",
+
       source: "Metrics",
+
       evidence: [`Memory usage is ${memoryMB.toFixed(2)} MB`],
+
       timestamp: telemetry.timestamp,
     });
   }
@@ -127,40 +145,52 @@ export function analyze(telemetry: Telemetry): HealthReport {
 
     detailedFindings.push({
       issue: "NodeNotReady",
+
       severity: "Critical",
+
       status: "Active",
+
       source: "Kubernetes",
+
       evidence: ["Kubernetes node is currently NotReady"],
+
       timestamp: telemetry.timestamp,
     });
   }
 
   if (kubernetes?.pods) {
     for (const pod of kubernetes.pods) {
-      if (!pod.ready) {
-        applicationHealthy = false;
-
-        findings.push(`Pod ${pod.name} is not ready`);
-
-        const evidence: string[] = [`Pod ${pod.name} is not ready`];
-
-        if (pod.phase) {
-          evidence.push(`Pod phase: ${pod.phase}`);
-        }
-
-        if (pod.restartCount !== undefined) {
-          evidence.push(`Restart count: ${pod.restartCount}`);
-        }
-
-        detailedFindings.push({
-          issue: "PodNotReady",
-          severity: "High",
-          status: "Active",
-          source: "Kubernetes",
-          evidence,
-          timestamp: telemetry.timestamp,
-        });
+      if (pod.ready) {
+        continue;
       }
+
+      applicationHealthy = false;
+
+      findings.push(`Pod ${pod.name} is not ready`);
+
+      const evidence: string[] = [`Pod ${pod.name} is not ready`];
+
+      if (pod.phase) {
+        evidence.push(`Pod phase: ${pod.phase}`);
+      }
+
+      if (pod.restartCount !== undefined) {
+        evidence.push(`Restart count: ${pod.restartCount}`);
+      }
+
+      detailedFindings.push({
+        issue: "PodNotReady",
+
+        severity: "High",
+
+        status: "Active",
+
+        source: "Kubernetes",
+
+        evidence,
+
+        timestamp: telemetry.timestamp,
+      });
     }
   }
 
@@ -180,13 +210,13 @@ export function analyze(telemetry: Telemetry): HealthReport {
     const timestamp =
       eventTimestamp instanceof Date
         ? eventTimestamp.toISOString()
-        : eventTimestamp;
+        : String(eventTimestamp);
 
     if (
       message.includes("liveness probe failed") ||
       message.includes("readiness probe failed")
     ) {
-      const isLiveness = message.includes("liveness");
+      const isLiveness = message.includes("liveness probe");
 
       const issue = isLiveness
         ? "LivenessProbeFailure"
@@ -196,10 +226,15 @@ export function analyze(telemetry: Telemetry): HealthReport {
 
       detailedFindings.push({
         issue,
+
         severity: "High",
+
         status: "Historical",
+
         source: "Application",
+
         evidence: [eventMessage],
+
         timestamp,
       });
     }
@@ -214,10 +249,15 @@ export function analyze(telemetry: Telemetry): HealthReport {
 
       detailedFindings.push({
         issue: "CrashLoopBackOff",
+
         severity: "Critical",
+
         status: "Active",
+
         source: "Application",
+
         evidence: [event.message ?? "Pod is currently in CrashLoopBackOff"],
+
         timestamp,
       });
     }
@@ -229,10 +269,15 @@ export function analyze(telemetry: Telemetry): HealthReport {
 
       detailedFindings.push({
         issue: "OOMKilled",
+
         severity: "Critical",
+
         status: "Active",
+
         source: "Application",
+
         evidence: [event.message ?? "Container was OOMKilled"],
+
         timestamp,
       });
     }
@@ -243,10 +288,15 @@ export function analyze(telemetry: Telemetry): HealthReport {
     ) {
       detailedFindings.push({
         issue: "NodeNotReady",
+
         severity: "High",
+
         status: "Historical",
+
         source: "Kubernetes",
-        evidence: [event.message ?? "Node is not ready"],
+
+        evidence: [event.message ?? "Node was not ready"],
+
         timestamp,
       });
     }
@@ -261,10 +311,15 @@ export function analyze(telemetry: Telemetry): HealthReport {
 
       detailedFindings.push({
         issue: "FailedScheduling",
+
         severity: "High",
+
         status: "Active",
+
         source: "Kubernetes",
+
         evidence: [event.message ?? "Pod scheduling failed"],
+
         timestamp,
       });
     }
@@ -281,10 +336,15 @@ export function analyze(telemetry: Telemetry): HealthReport {
 
       detailedFindings.push({
         issue: "ImagePullFailure",
+
         severity: "High",
+
         status: "Active",
+
         source: "Application",
+
         evidence: [event.message ?? "Container image pull failed"],
+
         timestamp,
       });
     }
@@ -297,12 +357,30 @@ export function analyze(telemetry: Telemetry): HealthReport {
   const healthy =
     infrastructureHealthy && applicationHealthy && kubernetesHealthy;
 
+  const hasActiveCritical = detailedFindings.some(
+    (finding) => finding.status === "Active" && finding.severity === "Critical",
+  );
+
+  const hasActiveHigh = detailedFindings.some(
+    (finding) => finding.status === "Active" && finding.severity === "High",
+  );
+
+  let status: HealthStatus = "Healthy";
+
+  if (hasActiveCritical) {
+    status = "Incident";
+  } else if (hasActiveHigh || !healthy) {
+    status = "Degraded";
+  }
+
   return {
     cpu: `${cpuUsage.toFixed(2)} %`,
 
     memory: `${memoryMB.toFixed(2)} MB`,
 
     healthy,
+
+    status,
 
     applicationHealthy,
 
