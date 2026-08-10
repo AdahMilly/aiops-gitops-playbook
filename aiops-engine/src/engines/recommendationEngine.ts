@@ -1,11 +1,7 @@
 import { RootCauseAnalysis } from "./rootCauseEngine";
 import { IncidentGroup } from "./incidentDeduplicationEngine";
 
-export type RecommendationPriority =
-  | "Low"
-  | "Medium"
-  | "High"
-  | "Critical";
+export type RecommendationPriority = "Low" | "Medium" | "High" | "Critical";
 
 export interface Prediction {
   metric?: string;
@@ -30,23 +26,21 @@ export function recommend(
 ): Recommendation[] {
   const recommendations = new Map<string, Recommendation>();
 
-  const isSystemHealthy =
-    rootCause?.subcategory === "System Healthy" &&
-    incidentGroups.length === 0;
+  const hasActionableIncidents = incidentGroups.length > 0;
 
-  if (isSystemHealthy) {
+  const hasActionablePredictions = predictions.some(
+    (prediction) =>
+      prediction.risk === "High" || prediction.risk === "Critical",
+  );
+
+  if (!rootCause && !hasActionableIncidents && !hasActionablePredictions) {
     return [];
   }
 
-  const addRecommendation = (
-    recommendation: Recommendation,
-  ): void => {
-    const normalized =
-      normalizeRecommendation(recommendation);
+  const addRecommendation = (recommendation: Recommendation): void => {
+    const normalized = normalizeRecommendation(recommendation);
 
-    const existing = recommendations.get(
-      normalized.key,
-    );
+    const existing = recommendations.get(normalized.key);
 
     if (!existing) {
       recommendations.set(normalized.key, {
@@ -64,18 +58,13 @@ export function recommend(
     }
 
     if (
-      priorityWeight(normalized.priority) >
-      priorityWeight(existing.priority)
+      priorityWeight(normalized.priority) > priorityWeight(existing.priority)
     ) {
       existing.priority = normalized.priority;
     }
 
-    if (
-      !existing.automation &&
-      normalized.automation
-    ) {
-      existing.automation =
-        normalized.automation;
+    if (!existing.automation && normalized.automation) {
+      existing.automation = normalized.automation;
     }
   };
 
@@ -94,8 +83,7 @@ export function recommend(
             "Drain and recover the affected node.",
             "Reschedule workloads if the node remains unavailable.",
           ],
-          automation:
-            "kubectl get nodes && kubectl describe nodes",
+          automation: "kubectl get nodes && kubectl describe nodes",
         });
         break;
 
@@ -112,8 +100,7 @@ export function recommend(
             "Review recent application deployments.",
             "Restart the deployment if the application remains unhealthy.",
           ],
-          automation:
-            "kubectl rollout restart deployment aiops-playbook",
+          automation: "kubectl rollout restart deployment aiops-playbook",
         });
         break;
 
@@ -130,8 +117,7 @@ export function recommend(
             "Review cache configuration.",
             "Restart unhealthy pods if necessary.",
           ],
-          automation:
-            "kubectl top pods && kubectl top nodes",
+          automation: "kubectl top pods && kubectl top nodes",
         });
         break;
 
@@ -147,8 +133,7 @@ export function recommend(
             "Scale the deployment if resource pressure persists.",
             "Profile application performance.",
           ],
-          automation:
-            "kubectl top pods && kubectl top nodes",
+          automation: "kubectl top pods && kubectl top nodes",
         });
         break;
 
@@ -192,11 +177,7 @@ export function recommend(
   }
 
   for (const group of incidentGroups) {
-    const recommendation =
-      buildIncidentGroupRecommendation(
-        group,
-        rootCause,
-      );
+    const recommendation = buildIncidentGroupRecommendation(group, rootCause);
 
     if (!recommendation) {
       continue;
@@ -204,17 +185,12 @@ export function recommend(
 
     addRecommendation(recommendation);
   }
-
   for (const prediction of predictions) {
-    if (
-      prediction.risk !== "High" &&
-      prediction.risk !== "Critical"
-    ) {
+    if (prediction.risk !== "High" && prediction.risk !== "Critical") {
       continue;
     }
 
-    const metric =
-      prediction.metric ?? "System";
+    const metric = prediction.metric ?? "System";
 
     const key = `forecast-${normalizeKey(metric)}`;
 
@@ -234,12 +210,8 @@ export function recommend(
     });
   }
 
-  return Array.from(
-    recommendations.values(),
-  ).sort(
-    (a, b) =>
-      priorityWeight(b.priority) -
-      priorityWeight(a.priority),
+  return Array.from(recommendations.values()).sort(
+    (a, b) => priorityWeight(b.priority) - priorityWeight(a.priority),
   );
 }
 
@@ -247,15 +219,13 @@ function buildIncidentGroupRecommendation(
   group: IncidentGroup,
   rootCause: RootCauseAnalysis | null,
 ): Recommendation | null {
-
-  if (
-    group.findings.some(
-      (finding) =>
-        finding.issue === "System Healthy",
-    )
-  ) {
+  if (group.findings.some((finding) => finding.issue === "System Healthy")) {
     return null;
   }
+
+  const actions = uniqueStrings(
+    group.findings.flatMap((finding) => finding.evidence),
+  );
 
   if (
     group.category === "Infrastructure" &&
@@ -266,26 +236,17 @@ function buildIncidentGroupRecommendation(
 
   if (
     group.category === "Application" &&
-    rootCause?.subcategory ===
-      "Health Check Failure"
+    rootCause?.subcategory === "Health Check Failure"
   ) {
     return null;
   }
-
-  const actions = uniqueStrings(
-    group.findings.flatMap(
-      (finding) => finding.evidence,
-    ),
-  );
 
   if (actions.length === 0) {
     return null;
   }
 
   return {
-    key: `incident-${normalizeKey(
-      group.category,
-    )}`,
+    key: `incident-${normalizeKey(group.category)}`,
 
     priority: group.severity,
 
@@ -301,13 +262,9 @@ function normalizeRecommendation(
   return {
     ...recommendation,
 
-    key: normalizeKey(
-      recommendation.key,
-    ),
+    key: normalizeKey(recommendation.key),
 
-    actions: uniqueStrings(
-      recommendation.actions,
-    ),
+    actions: uniqueStrings(recommendation.actions),
   };
 }
 
@@ -319,21 +276,11 @@ function normalizeKey(value: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
-function uniqueStrings(
-  values: string[],
-): string[] {
-  return [
-    ...new Set(
-      values
-        .map((value) => value.trim())
-        .filter(Boolean),
-    ),
-  ];
+function uniqueStrings(values: string[]): string[] {
+  return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
 }
 
-function priorityWeight(
-  priority: RecommendationPriority,
-): number {
+function priorityWeight(priority: RecommendationPriority): number {
   switch (priority) {
     case "Critical":
       return 4;
