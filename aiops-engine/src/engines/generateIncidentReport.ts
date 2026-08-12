@@ -1,24 +1,37 @@
 import { correlate, CorrelationFinding } from "./correlationEngine";
+
 import { findRootCause, RootCauseAnalysis } from "./rootCauseEngine";
+
 import { predict, Prediction } from "./predictionEngine";
+
 import { recommend, Recommendation } from "./recommendationEngine";
+
 import { scoreIncident, IncidentScore } from "./incidentScoringEngine";
+
 import { buildTimeline, TimelineEntry } from "./timelineEngine";
 
 import { mapIncidents } from "../incident/incidentMapper";
+
 import {
   deduplicateIncidents,
   IncidentGroup,
 } from "./incidentDeduplicationEngine";
 
 import { processIncidentLifecycle } from "./incidentLifecycleEngine";
-import { IncidentLifecycleResult } from "../analyzers/incidentLifecycle";
+
+import {
+  Incident,
+  IncidentLifecycleResult,
+} from "../analyzers/incidentLifecycle";
+
 import { reconcileHealthState } from "./healthStateEngine";
 
 interface GenerateIncidentReportInput {
   health: any;
+
   telemetry: any;
-  previousIncidents?: import("../analyzers/incidentLifecycle").Incident[];
+
+  previousIncidents?: Incident[];
 }
 
 export interface IncidentReport {
@@ -45,13 +58,13 @@ export interface IncidentReport {
   recommendations: Recommendation[];
 
   timeline: TimelineEntry[];
+
   incidentLifecycle: IncidentLifecycleResult;
 }
 
 export function generateIncidentReport(
   input: GenerateIncidentReportInput,
 ): IncidentReport {
-
   const incidents = mapIncidents(input.telemetry.events ?? []);
 
   const incidentLifecycle = processIncidentLifecycle(
@@ -154,7 +167,9 @@ export function generateIncidentReport(
 
     summary: {
       score: score.score,
+
       level: finalHealthState.level,
+
       healthy: finalHealthState.healthy,
     },
 

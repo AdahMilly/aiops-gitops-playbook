@@ -36,6 +36,9 @@ export function processIncidentLifecycle(
 ): IncidentLifecycleResult {
   const incidentMap = new Map<string, Incident>();
 
+  /*
+   * Restore previously known incidents.
+   */
   for (const incident of previousIncidents) {
     incidentMap.set(getIncidentKey(incident), {
       ...incident,
@@ -45,6 +48,9 @@ export function processIncidentLifecycle(
 
   const currentKeys = new Set<string>();
 
+  /*
+   * Process current findings.
+   */
   for (const finding of findings) {
     const key = getFindingKey(finding);
 
@@ -54,6 +60,9 @@ export function processIncidentLifecycle(
 
     const existing = incidentMap.get(key);
 
+    /*
+     * Existing incident.
+     */
     if (existing) {
       existing.lastSeen = getLatestTimestamp(existing.lastSeen, timestamp);
 
@@ -76,12 +85,18 @@ export function processIncidentLifecycle(
       continue;
     }
 
+    /*
+     * New incident.
+     */
     const incident: Incident = {
       id: createIncidentId(finding.issue, finding.source),
 
       issue: finding.issue,
 
-      category: finding.source === "Kubernetes" ? "Kubernetes" : finding.source,
+      category:
+        finding.source === "Kubernetes"
+          ? "Kubernetes"
+          : (finding.source as Incident["category"]),
 
       severity: finding.severity,
 
@@ -101,6 +116,10 @@ export function processIncidentLifecycle(
     incidentMap.set(key, incident);
   }
 
+  /*
+   * Anything that existed previously but wasn't detected
+   * during this run is considered resolved.
+   */
   for (const incident of incidentMap.values()) {
     const key = getIncidentKey(incident);
 

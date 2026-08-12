@@ -1,4 +1,3 @@
-
 export type IncidentStatus = "Active" | "Historical" | "Resolved";
 
 export type IncidentCategory =

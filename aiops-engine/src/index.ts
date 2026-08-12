@@ -1,6 +1,10 @@
 import { collectTelemetry } from "./collectors/telemetryCollector";
 import { analyze } from "./analyzers/healthAnalyzer";
 import { generateIncidentReport } from "./engines/generateIncidentReport";
+import {
+  loadIncidentState,
+  saveIncidentState,
+} from "./state/incidentStateStore";
 
 async function main() {
   console.log("\n=====================================");
@@ -13,14 +17,27 @@ async function main() {
 
   console.log("Telemetry collected successfully.\n");
 
-  const health = analyze(telemetry);
+   const health = analyze(telemetry);
 
-  console.log("Health analysis complete.\n");
+   console.log("Health analysis complete.\n");
 
-  const report = generateIncidentReport({
-    health,
-    telemetry,
-  });
+   console.log("Loading previous incident state...\n");
+
+   const previousIncidents = loadIncidentState();
+
+   console.log(`Previous incidents loaded: ${previousIncidents.length}\n`);
+
+   const report = generateIncidentReport({
+     health,
+     telemetry,
+     previousIncidents,
+   });
+
+   saveIncidentState(report.incidentLifecycle.activeIncidents);
+
+   console.log(
+     `Incident state saved: ${report.incidentLifecycle.activeIncidents.length} active incidents.\n`,
+   );
 
   console.log("=====================================");
   console.log("INCIDENT SUMMARY");

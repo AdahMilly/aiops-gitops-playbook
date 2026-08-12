@@ -1,0 +1,47 @@
+{
+  "incidents": [
+    {
+      "id": "kubernetes-nodenotready",
+      "issue": "NodeNotReady",
+      "category": "Kubernetes",
+      "severity": "High",
+      "status": "Active",
+      "firstSeen": "2026-08-12T13:07:31.000Z",
+      "lastSeen": "2026-08-12T13:07:31.000Z",
+      "occurrences": 1,
+      "evidence": [
+        "Node is not ready"
+      ],
+      "source": "Kubernetes"
+    },
+    {
+      "id": "application-livenessprobefailure",
+      "issue": "LivenessProbeFailure",
+      "category": "Application",
+      "severity": "High",
+      "status": "Active",
+      "firstSeen": "2026-08-12T13:06:01.000Z",
+      "lastSeen": "2026-08-12T13:06:01.000Z",
+      "occurrences": 1,
+      "evidence": [
+        "Liveness probe failed: Get \"http://10.244.0.19:3000/\": context deadline exceeded (Client.Timeout exceeded while awaiting headers)"
+      ],
+      "source": "Application"
+    },
+    {
+      "id": "application-readinessprobefailure",
+      "issue": "ReadinessProbeFailure",
+      "category": "Application",
+      "severity": "High",
+      "status": "Active",
+      "firstSeen": "2026-08-12T12:45:59.000Z",
+      "lastSeen": "2026-08-12T12:45:59.000Z",
+      "occurrences": 1,
+      "evidence": [
+        "Readiness probe failed: Get \"http://10.244.0.19:3000/\": context deadline exceeded (Client.Timeout exceeded while awaiting headers)"
+      ],
+      "source": "Application"
+    }
+  ],
+  "updatedAt": "2026-08-12T13:18:07.100Z"
+}
