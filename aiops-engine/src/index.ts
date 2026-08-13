@@ -17,27 +17,23 @@ async function main() {
 
   console.log("Telemetry collected successfully.\n");
 
-   const health = analyze(telemetry);
+  const health = analyze(telemetry);
 
-   console.log("Health analysis complete.\n");
+  console.log("Health analysis complete.\n");
 
-   console.log("Loading previous incident state...\n");
+  const previousIncidents = loadIncidentState();
 
-   const previousIncidents = loadIncidentState();
+  const report = generateIncidentReport({
+    health,
+    telemetry,
+    previousIncidents,
+  });
 
-   console.log(`Previous incidents loaded: ${previousIncidents.length}\n`);
+  saveIncidentState(report.incidentLifecycle.incidents);
 
-   const report = generateIncidentReport({
-     health,
-     telemetry,
-     previousIncidents,
-   });
-
-   saveIncidentState(report.incidentLifecycle.activeIncidents);
-
-   console.log(
-     `Incident state saved: ${report.incidentLifecycle.activeIncidents.length} active incidents.\n`,
-   );
+  console.log(
+    `Incident state saved: ${report.incidentLifecycle.activeIncidents.length} active incidents.\n`,
+  );
 
   console.log("=====================================");
   console.log("INCIDENT SUMMARY");

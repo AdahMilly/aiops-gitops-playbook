@@ -20,8 +20,8 @@ import {
 import { processIncidentLifecycle } from "./incidentLifecycleEngine";
 
 import {
-  Incident,
   IncidentLifecycleResult,
+  Incident as LifecycleIncident,
 } from "../analyzers/incidentLifecycle";
 
 import { reconcileHealthState } from "./healthStateEngine";
@@ -31,7 +31,7 @@ interface GenerateIncidentReportInput {
 
   telemetry: any;
 
-  previousIncidents?: Incident[];
+  previousIncidents?: LifecycleIncident[];
 }
 
 export interface IncidentReport {
