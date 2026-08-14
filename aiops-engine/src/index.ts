@@ -5,6 +5,7 @@ import {
   loadIncidentState,
   saveIncidentState,
 } from "./state/incidentStateStore";
+import { runAILayer } from "./ai/aiEngine";
 
 async function main() {
   console.log("\n=====================================");
@@ -22,6 +23,8 @@ async function main() {
   console.log("Health analysis complete.\n");
 
   const previousIncidents = loadIncidentState();
+
+  console.log(`Loaded ${previousIncidents.length} previous incidents.\n`);
 
   const report = generateIncidentReport({
     health,
@@ -60,8 +63,8 @@ async function main() {
 
     console.log("\nEvidence:");
 
-    report.rootCause.evidence.forEach((e) => {
-      console.log(` • ${e}`);
+    report.rootCause.evidence.forEach((evidence) => {
+      console.log(` • ${evidence}`);
     });
   } else {
     console.log("No root cause identified.");
@@ -92,11 +95,11 @@ async function main() {
 
     console.log("\nEvidence:");
 
-    group.evidence.forEach((e) => {
-      console.log(` • ${e}`);
+    group.evidence.forEach((evidence) => {
+      console.log(` • ${evidence}`);
     });
 
-    if (group.affectedPods.length) {
+    if (group.affectedPods.length > 0) {
       console.log("\nAffected Pods:");
 
       group.affectedPods.forEach((pod) => {
@@ -115,6 +118,8 @@ async function main() {
     report.correlations.map((finding) => ({
       Severity: finding.severity,
       Issue: finding.issue,
+      Status: finding.status,
+      Source: finding.source,
       Evidence: finding.evidence.join(", "),
     })),
   );
@@ -125,8 +130,10 @@ async function main() {
 
   console.table(
     report.predictions.map((prediction) => ({
+      Metric: prediction.metric,
       Risk: prediction.risk,
       Probability: `${Math.round(prediction.probability * 100)}%`,
+      Horizon: prediction.horizon,
       Message: prediction.message,
     })),
   );
@@ -161,10 +168,76 @@ async function main() {
   );
 
   console.log("\n=====================================");
+  console.log("INCIDENT LIFECYCLE");
+  console.log("=====================================");
+
+  console.table(
+    report.incidentLifecycle.incidents.map((incident) => ({
+      Issue: incident.issue,
+      Category: incident.category,
+      Severity: incident.severity,
+      Status: incident.status,
+      Occurrences: incident.occurrences,
+      FirstSeen: incident.firstSeen,
+      LastSeen: incident.lastSeen,
+    })),
+  );
+
+  console.log(
+    `Incident state saved: ${report.incidentLifecycle.activeIncidents.length} active incidents.\n`,
+  );
+
+  console.log("=====================================");
+  console.log("AI INCIDENT INTELLIGENCE");
+  console.log("=====================================\n");
+
+  console.log("Analyzing incident report with AI...\n");
+
+  let aiAnalysis;
+
+  try {
+    console.log("\n=====================================");
+    console.log("AI INCIDENT INTELLIGENCE");
+    console.log("=====================================\n");
+
+    console.log("Analyzing incident report with AI...\n");
+
+    aiAnalysis = await runAILayer(report);
+
+    console.log("AI analysis completed successfully.\n");
+  } catch (error: any) {
+    console.error("\nAI analysis unavailable.");
+
+    if (error?.code === "insufficient_quota") {
+      console.error(
+        "OpenAI API quota is exhausted. Continuing with deterministic AIOps intelligence.",
+      );
+    } else {
+      console.error(error);
+    }
+
+    aiAnalysis = {
+      available: false,
+      provider: "openai",
+      error:
+        error?.code === "insufficient_quota"
+          ? "API quota exhausted"
+          : "AI analysis failed",
+      analysis: null,
+    };
+  }
+
+  console.log("\n=====================================");
   console.log("FULL INCIDENT REPORT");
   console.log("=====================================\n");
 
-  console.dir(report, { depth: null });
+  console.dir(
+    {
+      ...report,
+      aiAnalysis,
+    },
+    { depth: null },
+  );
 
   console.log("\n=====================================");
   console.log("PIPELINE COMPLETED SUCCESSFULLY");
@@ -174,5 +247,6 @@ async function main() {
 main().catch((error) => {
   console.error("\nPipeline failed.\n");
   console.error(error);
+
   process.exit(1);
 });

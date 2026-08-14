@@ -1,13 +1,8 @@
 import { correlate, CorrelationFinding } from "./correlationEngine";
-
 import { findRootCause, RootCauseAnalysis } from "./rootCauseEngine";
-
 import { predict, Prediction } from "./predictionEngine";
-
 import { recommend, Recommendation } from "./recommendationEngine";
-
 import { scoreIncident, IncidentScore } from "./incidentScoringEngine";
-
 import { buildTimeline, TimelineEntry } from "./timelineEngine";
 
 import { mapIncidents } from "../incident/incidentMapper";
@@ -28,9 +23,7 @@ import { reconcileHealthState } from "./healthStateEngine";
 
 interface GenerateIncidentReportInput {
   health: any;
-
   telemetry: any;
-
   previousIncidents?: LifecycleIncident[];
 }
 
