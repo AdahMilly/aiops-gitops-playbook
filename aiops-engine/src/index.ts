@@ -6,6 +6,8 @@ import {
   saveIncidentState,
 } from "./state/incidentStateStore";
 import { runAILayer } from "./ai/aiEngine";
+import { orchestrateAILayer } from "./ai/aiOrchestrator";
+import { buildAIRemediationPlan } from "./ai/aiRemediationPlanner";
 
 async function main() {
   console.log("\n=====================================");
@@ -26,13 +28,13 @@ async function main() {
 
   console.log(`Loaded ${previousIncidents.length} previous incidents.\n`);
 
-  const report = generateIncidentReport({
-    health,
-    telemetry,
-    previousIncidents,
-  });
+ const report = generateIncidentReport({
+   health,
+   telemetry,
+   previousIncidents,
+ });
 
-  saveIncidentState(report.incidentLifecycle.incidents);
+ saveIncidentState(report.incidentLifecycle.incidents);
 
   console.log(
     `Incident state saved: ${report.incidentLifecycle.activeIncidents.length} active incidents.\n`,
@@ -227,17 +229,25 @@ async function main() {
     };
   }
 
+  const aiResult = await orchestrateAILayer(report);
+
+  const remediationPlan = aiResult.analysis
+    ? buildAIRemediationPlan(aiResult.analysis)
+    : null;
+
   console.log("\n=====================================");
   console.log("FULL INCIDENT REPORT");
   console.log("=====================================\n");
 
-  console.dir(
-    {
-      ...report,
-      aiAnalysis,
-    },
-    { depth: null },
-  );
+  const finalReport = {
+    ...report,
+
+    aiAnalysis: aiResult,
+
+    aiRemediation: remediationPlan,
+  };
+
+  console.dir(finalReport, { depth: null });
 
   console.log("\n=====================================");
   console.log("PIPELINE COMPLETED SUCCESSFULLY");

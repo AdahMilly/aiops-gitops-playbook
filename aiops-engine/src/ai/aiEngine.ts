@@ -103,50 +103,71 @@ export async function runAILayer(
     incidentReport: report,
   });
 
-  const response = await openai.responses.create({
-    model,
-
-    instructions: buildAISystemInstructions(),
-
-    input: prompt,
-
-    text: {
-      format: {
-        type: "json_schema",
-        name: "ai_incident_analysis",
-        strict: true,
-        schema: AI_ANALYSIS_SCHEMA,
-      },
-    },
-  });
-
-  if (!response.output_text) {
-    throw new Error("AI returned an empty response.");
-  }
-
-  let parsed: Omit<AIAnalysisResult, "generatedAt">;
-
   try {
-    parsed = JSON.parse(response.output_text) as Omit<
-      AIAnalysisResult,
-      "generatedAt"
-    >;
-  } catch (error) {
-    console.error("Failed to parse AI response:");
-    console.error(response.output_text);
-
-    throw new Error("AI returned invalid structured output.", {
-      cause: error,
+    const response = await openai.responses.create({
+      model,
+      instructions: buildAISystemInstructions(),
+      input: prompt,
+      text: {
+        format: {
+          type: "json_schema",
+          name: "ai_incident_analysis",
+          strict: true,
+          schema: AI_ANALYSIS_SCHEMA,
+        },
+      },
     });
+
+    if (!response.output_text) {
+      throw new Error("AI returned an empty response.");
+    }
+
+    let parsed: Omit<AIAnalysisResult, "generatedAt">;
+
+    try {
+      parsed = JSON.parse(response.output_text) as Omit<
+        AIAnalysisResult,
+        "generatedAt"
+      >;
+    } catch (error) {
+      console.error("Failed to parse AI response:");
+      console.error(response.output_text);
+
+      throw new Error("AI returned invalid structured output.", {
+        cause: error,
+      });
+    }
+
+    validateAIResult(parsed);
+
+    return {
+      ...parsed,
+      generatedAt: new Date().toISOString(),
+    };
+  } catch (error: any) {
+    if (error?.status === 429) {
+      throw new Error("AI provider quota or rate limit exceeded.", {
+        cause: error,
+      });
+    }
+
+    if (error?.status === 401) {
+      throw new Error(
+        "AI provider authentication failed. Check OPENAI_API_KEY.",
+        {
+          cause: error,
+        },
+      );
+    }
+
+    if (error?.status >= 500) {
+      throw new Error("AI provider temporarily unavailable.", {
+        cause: error,
+      });
+    }
+
+    throw error;
   }
-
-  validateAIResult(parsed);
-
-  return {
-    ...parsed,
-
-    generatedAt: new Date().toISOString(),
-  };
 }
 
 function validateAIResult(result: Omit<AIAnalysisResult, "generatedAt">): void {
