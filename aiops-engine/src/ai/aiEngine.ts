@@ -150,7 +150,6 @@ export async function runAILayer(
         cause: error,
       });
     }
-
     if (error?.status === 401) {
       throw new Error(
         "AI provider authentication failed. Check OPENAI_API_KEY.",
@@ -159,7 +158,6 @@ export async function runAILayer(
         },
       );
     }
-
     if (error?.status >= 500) {
       throw new Error("AI provider temporarily unavailable.", {
         cause: error,
@@ -174,42 +172,33 @@ function validateAIResult(result: Omit<AIAnalysisResult, "generatedAt">): void {
   if (!result.summary?.trim()) {
     throw new Error("AI response is missing summary.");
   }
-
   if (!result.diagnosis?.trim()) {
     throw new Error("AI response is missing diagnosis.");
   }
-
   if (!result.rootCauseExplanation?.trim()) {
     throw new Error("AI response is missing root cause explanation.");
   }
-
   if (!result.impact?.trim()) {
     throw new Error("AI response is missing impact analysis.");
   }
-
   if (!result.riskExplanation?.trim()) {
     throw new Error("AI response is missing risk explanation.");
   }
-
   if (!Array.isArray(result.nextActions)) {
     throw new Error("AI response contains invalid nextActions.");
   }
-
   if (!Array.isArray(result.evidenceUsed)) {
     throw new Error("AI response contains invalid evidenceUsed.");
   }
-
   if (!Array.isArray(result.limitations)) {
     throw new Error("AI response contains invalid limitations.");
   }
-
   if (
     typeof result.confidence !== "number" ||
     !Number.isFinite(result.confidence)
   ) {
     throw new Error("AI response contains invalid confidence.");
   }
-
   if (result.confidence < 0 || result.confidence > 1) {
     throw new Error("AI confidence must be between 0 and 1.");
   }

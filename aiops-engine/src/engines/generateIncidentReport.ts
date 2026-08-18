@@ -4,21 +4,17 @@ import { predict, Prediction } from "./predictionEngine";
 import { recommend, Recommendation } from "./recommendationEngine";
 import { scoreIncident, IncidentScore } from "./incidentScoringEngine";
 import { buildTimeline, TimelineEntry } from "./timelineEngine";
-
 import { mapIncidents } from "../incident/incidentMapper";
-
 import {
   deduplicateIncidents,
   IncidentGroup,
 } from "./incidentDeduplicationEngine";
-
 import { processIncidentLifecycle } from "./incidentLifecycleEngine";
-
+import type { AIOrchestrationResult } from "../ai/aiOrchestrator";
 import {
   IncidentLifecycleResult,
   Incident as LifecycleIncident,
 } from "../analyzers/incidentLifecycle";
-
 import { reconcileHealthState } from "./healthStateEngine";
 
 interface GenerateIncidentReportInput {
@@ -29,30 +25,21 @@ interface GenerateIncidentReportInput {
 
 export interface IncidentReport {
   generatedAt: string;
-
   summary: {
     score: number;
     level: IncidentScore["level"];
     healthy: boolean;
   };
-
   health: any;
-
   trends: any;
-
   rootCause: RootCauseAnalysis | null;
-
   incidentGroups: IncidentGroup[];
-
   correlations: CorrelationFinding[];
-
   predictions: Prediction[];
-
   recommendations: Recommendation[];
-
   timeline: TimelineEntry[];
-
   incidentLifecycle: IncidentLifecycleResult;
+  aiAnalysis?: AIOrchestrationResult;
 }
 
 export function generateIncidentReport(
@@ -92,7 +79,6 @@ export function generateIncidentReport(
 
         return {
           ...finding,
-
           status: lifecycleIncident?.status ?? finding.status ?? "Historical",
         };
       },
@@ -101,15 +87,10 @@ export function generateIncidentReport(
 
   const correlations = correlate({
     health: finalHealth,
-
     metrics: input.telemetry.metrics,
-
     trends: input.telemetry.trends,
-
     logs: input.telemetry.logs ?? [],
-
     traces: input.telemetry.traces ?? [],
-
     incidents,
   });
 
@@ -123,11 +104,8 @@ export function generateIncidentReport(
 
   const predictions = predict({
     health: finalHealth,
-
     trends: input.telemetry.trends,
-
     correlations: actionableCorrelations,
-
     rootCause,
   });
 
@@ -135,53 +113,34 @@ export function generateIncidentReport(
 
   const score = scoreIncident({
     health: finalHealth,
-
     correlations: actionableCorrelations,
-
     predictions,
-
     trends: input.telemetry.trends,
-
     rootCause,
   });
 
   const timeline = buildTimeline({
     health: finalHealth,
-
     correlations: actionableCorrelations,
-
     predictions,
-
     incidents,
   });
 
   return {
     generatedAt: new Date().toISOString(),
-
     summary: {
       score: score.score,
-
       level: finalHealthState.level,
-
       healthy: finalHealthState.healthy,
     },
-
     health: finalHealth,
-
     trends: input.telemetry.trends,
-
     rootCause,
-
     incidentGroups,
-
     correlations: actionableCorrelations,
-
     predictions,
-
     recommendations,
-
     timeline,
-
     incidentLifecycle,
   };
 }

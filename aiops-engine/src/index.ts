@@ -1,13 +1,18 @@
 import { collectTelemetry } from "./collectors/telemetryCollector";
 import { analyze } from "./analyzers/healthAnalyzer";
 import { generateIncidentReport } from "./engines/generateIncidentReport";
+
 import {
   loadIncidentState,
   saveIncidentState,
 } from "./state/incidentStateStore";
-import { runAILayer } from "./ai/aiEngine";
+
 import { orchestrateAILayer } from "./ai/aiOrchestrator";
 import { buildAIRemediationPlan } from "./ai/aiRemediationPlanner";
+import {
+  executeRemediationPlan,
+  RemediationExecutionMode,
+} from "./ai/remediationExecutor";
 
 async function main() {
   console.log("\n=====================================");
@@ -28,13 +33,13 @@ async function main() {
 
   console.log(`Loaded ${previousIncidents.length} previous incidents.\n`);
 
- const report = generateIncidentReport({
-   health,
-   telemetry,
-   previousIncidents,
- });
+  const report = generateIncidentReport({
+    health,
+    telemetry,
+    previousIncidents,
+  });
 
- saveIncidentState(report.incidentLifecycle.incidents);
+  saveIncidentState(report.incidentLifecycle.incidents);
 
   console.log(
     `Incident state saved: ${report.incidentLifecycle.activeIncidents.length} active incidents.\n`,
@@ -185,69 +190,128 @@ async function main() {
     })),
   );
 
-  console.log(
-    `Incident state saved: ${report.incidentLifecycle.activeIncidents.length} active incidents.\n`,
-  );
-
-  console.log("=====================================");
+  console.log("\n=====================================");
   console.log("AI INCIDENT INTELLIGENCE");
   console.log("=====================================\n");
 
-  console.log("Analyzing incident report with AI...\n");
+  console.log("Passing incident report to AI orchestrator...\n");
 
-  let aiAnalysis;
+  let aiResult;
 
   try {
-    console.log("\n=====================================");
-    console.log("AI INCIDENT INTELLIGENCE");
-    console.log("=====================================\n");
+    aiResult = await orchestrateAILayer(report);
 
-    console.log("Analyzing incident report with AI...\n");
-
-    aiAnalysis = await runAILayer(report);
-
-    console.log("AI analysis completed successfully.\n");
-  } catch (error: any) {
-    console.error("\nAI analysis unavailable.");
-
-    if (error?.code === "insufficient_quota") {
-      console.error(
-        "OpenAI API quota is exhausted. Continuing with deterministic AIOps intelligence.",
-      );
+    if (aiResult.available) {
+      console.log("AI analysis completed successfully.\n");
     } else {
-      console.error(error);
-    }
+      console.log(
+        "AI analysis unavailable. Continuing with deterministic intelligence.\n",
+      );
 
-    aiAnalysis = {
+      if (aiResult.error) {
+        console.log(`AI reason: ${aiResult.error}\n`);
+      }
+    }
+  } catch (error: any) {
+    console.error("\nAI orchestration failed.");
+
+    console.error(error);
+
+    aiResult = {
       available: false,
       provider: "openai",
-      error:
-        error?.code === "insufficient_quota"
-          ? "API quota exhausted"
-          : "AI analysis failed",
+      error: "AI orchestration failed",
       analysis: null,
     };
   }
 
-  const aiResult = await orchestrateAILayer(report);
+  console.log("=====================================");
+  console.log("AI REMEDIATION PLANNER");
+  console.log("=====================================\n");
 
-  const remediationPlan = aiResult.analysis
-    ? buildAIRemediationPlan(aiResult.analysis)
-    : null;
+const remediationPlan = aiResult.analysis
+  ? buildAIRemediationPlan(aiResult.analysis)
+  : null;
+
+let remediationExecution = null;
+
+if (remediationPlan) {
+  console.log("\n=====================================");
+  console.log("AI REMEDIATION PLAN");
+  console.log("=====================================\n");
+
+  console.log(`Priority: ${remediationPlan.priority}`);
+  console.log(`Problem: ${remediationPlan.problem}`);
+  console.log(`Diagnosis: ${remediationPlan.diagnosis}`);
+
+  console.log("\nActions:");
+
+  console.table(
+    remediationPlan.actions.map((action) => ({
+      Title: action.title,
+      Risk: action.risk,
+      Approval: action.requiresApproval ? "Required" : "Not Required",
+      Command: action.command ?? "N/A",
+    })),
+  );
+
+  if (remediationPlan.blockedActions.length > 0) {
+    console.log("\nBlocked Actions:");
+
+    remediationPlan.blockedActions.forEach((action) => {
+      console.log(` • ${action}`);
+    });
+  }
 
   console.log("\n=====================================");
+  console.log("REMEDIATION EXECUTION");
+  console.log("=====================================\n");
+
+  const remediationMode: RemediationExecutionMode = "observe";
+
+  console.log(`Execution mode: ${remediationMode}`);
+  console.log("No infrastructure changes will be made.\n");
+
+  remediationExecution = await executeRemediationPlan(
+    remediationPlan,
+    remediationMode,
+  );
+
+  console.table(
+    remediationExecution.results.map((result) => ({
+      Title: result.title,
+      Status: result.status,
+      Risk: result.risk,
+      Approval: result.requiresApproval ? "Required" : "Not Required",
+      Command: result.command ?? "N/A",
+    })),
+  );
+
+  console.log("\nRemediation Summary:");
+
+  console.table({
+    Executed: remediationExecution.executedCount,
+    Validated: remediationExecution.validatedCount,
+    Skipped: remediationExecution.skippedCount,
+    Blocked: remediationExecution.blockedCount,
+    Failed: remediationExecution.failedCount,
+  });
+}
+
+  console.log("=====================================");
   console.log("FULL INCIDENT REPORT");
   console.log("=====================================\n");
 
-  const finalReport = {
-    ...report,
+const finalReport = {
+  ...report,
+  aiAnalysis: aiResult,
+  aiRemediation: remediationPlan,
+  remediationExecution,
+};
 
-    aiAnalysis: aiResult,
-
-    aiRemediation: remediationPlan,
-  };
-
-  console.dir(finalReport, { depth: null });
+  console.dir(finalReport, {
+    depth: null,
+  });
 
   console.log("\n=====================================");
   console.log("PIPELINE COMPLETED SUCCESSFULLY");
@@ -257,6 +321,5 @@ async function main() {
 main().catch((error) => {
   console.error("\nPipeline failed.\n");
   console.error(error);
-
   process.exit(1);
 });
