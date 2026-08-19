@@ -2,15 +2,20 @@ import type {
   AIRemediationAction,
   AIRemediationPlan,
 } from "./aiRemediationPlanner";
+import { evaluateRemediationAction } from "./remediationPolicy";
+import {
+  requestRemediationApproval,
+  listApprovalRequests,
+} from "./remediationApproval";
 
 export type RemediationExecutionMode = "observe" | "dry-run" | "execute";
-
 export type RemediationActionStatus =
   | "Skipped"
   | "Validated"
   | "Executed"
   | "Failed"
-  | "Blocked";
+  | "Blocked"
+  | "AwaitingApproval";
 
 export interface RemediationExecutionResult {
   actionId: string;
@@ -22,6 +27,7 @@ export interface RemediationExecutionResult {
   requiresApproval: boolean;
   message: string;
   command?: string;
+  approvalId?: string;
   executedAt: string;
 }
 
@@ -37,6 +43,7 @@ export interface RemediationExecutionReport {
   skippedCount: number;
   blockedCount: number;
   failedCount: number;
+  awaitingApprovalCount: number;
 }
 
 export async function executeRemediationPlan(
@@ -58,17 +65,17 @@ export async function executeRemediationPlan(
       skippedCount: 0,
       blockedCount: 0,
       failedCount: 0,
+      awaitingApprovalCount: 0,
     };
   }
 
   const results: RemediationExecutionResult[] = [];
-
   for (const action of plan.actions) {
     const result = await processAction(action, plan, mode);
     results.push(result);
   }
-
   const completedAt = new Date().toISOString();
+
   return {
     available: true,
     mode,
@@ -85,6 +92,9 @@ export async function executeRemediationPlan(
     blockedCount: results.filter((result) => result.status === "Blocked")
       .length,
     failedCount: results.filter((result) => result.status === "Failed").length,
+    awaitingApprovalCount: results.filter(
+      (result) => result.status === "AwaitingApproval",
+    ).length,
   };
 }
 
@@ -110,7 +120,8 @@ async function processAction(
     };
   }
 
-  if (isBlockedAction(action, plan)) {
+  const policy = evaluateRemediationAction(action);
+  if (policy.decision === "BLOCKED") {
     return {
       actionId: action.id,
       title: action.title,
@@ -118,24 +129,40 @@ async function processAction(
       status: "Blocked",
       mode,
       risk: action.risk,
-      requiresApproval: true,
-      message: "Action is blocked because it requires explicit human review.",
+      requiresApproval: policy.requiresApproval,
+      message: policy.reason,
       command: action.command,
       executedAt,
     };
   }
 
-  if (action.requiresApproval) {
+  if (policy.decision === "REQUIRES_APPROVAL") {
+    const approval = requestRemediationApproval(action);
     return {
       actionId: action.id,
       title: action.title,
       description: action.description,
-      status: "Blocked",
+      status: "AwaitingApproval",
       mode,
       risk: action.risk,
       requiresApproval: true,
-      message:
-        "Action requires human approval before execution. Approval workflow is not enabled yet.",
+      message: "Remediation requires explicit human approval before execution.",
+      command: action.command,
+      approvalId: approval.id,
+      executedAt,
+    };
+  }
+
+  if (policy.decision === "DRY_RUN_ONLY") {
+    return {
+      actionId: action.id,
+      title: action.title,
+      description: action.description,
+      status: mode === "dry-run" ? "Validated" : "Skipped",
+      mode,
+      risk: action.risk,
+      requiresApproval: false,
+      message: policy.reason,
       command: action.command,
       executedAt,
     };
@@ -149,7 +176,7 @@ async function processAction(
       status: "Skipped",
       mode,
       risk: action.risk,
-      requiresApproval: action.requiresApproval,
+      requiresApproval: false,
       message: "Action observed only. No infrastructure changes were made.",
       command: action.command,
       executedAt,
@@ -164,7 +191,7 @@ async function processAction(
       status: "Validated",
       mode,
       risk: action.risk,
-      requiresApproval: action.requiresApproval,
+      requiresApproval: false,
       message:
         "Action validated successfully in dry-run mode. No infrastructure changes were made.",
       command: action.command,
@@ -179,21 +206,16 @@ async function processAction(
     status: "Blocked",
     mode,
     risk: action.risk,
-    requiresApproval: action.requiresApproval,
+    requiresApproval: false,
     message:
-      "Infrastructure execution is currently disabled. Action requires the remediation policy and approval layer.",
+      "Infrastructure execution is currently disabled. The action passed policy validation but no execution adapter is enabled.",
     command: action.command,
     executedAt,
   };
 }
 
-function isBlockedAction(
-  action: AIRemediationAction,
-  plan: AIRemediationPlan,
-): boolean {
-  return plan.blockedActions.some(
-    (blockedAction) =>
-      blockedAction.toLowerCase().includes(action.title.toLowerCase()) ||
-      action.title.toLowerCase().includes(blockedAction.toLowerCase()),
+export function getPendingApprovals() {
+  return listApprovalRequests().filter(
+    (request) => request.status === "PENDING",
   );
 }
