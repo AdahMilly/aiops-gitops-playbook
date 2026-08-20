@@ -3,9 +3,15 @@ import {
   evaluateRemediationAction,
   type RemediationPolicyResult,
 } from "./remediationPolicy";
+import {
+  findApprovalRequest,
+  findPendingApprovalForAction,
+  loadApprovalRequests,
+  saveApprovalRequest,
+  clearApprovalStore,
+} from "./remediationApprovalStore";
 
 export type ApprovalStatus = "PENDING" | "APPROVED" | "REJECTED" | "EXPIRED";
-
 export interface RemediationApprovalRequest {
   id: string;
   actionId: string;
@@ -21,11 +27,9 @@ export interface RemediationApprovalRequest {
   policy: RemediationPolicyResult;
 }
 
-const approvalRequests = new Map<string, RemediationApprovalRequest>();
 function createApprovalId(actionId: string): string {
   return `approval-${actionId}-${Date.now()}`;
 }
-
 export function requestRemediationApproval(
   action: AIRemediationAction,
 ): RemediationApprovalRequest {
@@ -35,14 +39,10 @@ export function requestRemediationApproval(
       `Action "${action.title}" does not require human approval.`,
     );
   }
-
-  const existingRequest = Array.from(approvalRequests.values()).find(
-    (request) => request.actionId === action.id && request.status === "PENDING",
-  );
+  const existingRequest = findPendingApprovalForAction(action.id);
   if (existingRequest) {
     return existingRequest;
   }
-
   const request: RemediationApprovalRequest = {
     id: createApprovalId(action.id),
     actionId: action.id,
@@ -54,25 +54,23 @@ export function requestRemediationApproval(
     requestedAt: new Date().toISOString(),
     policy,
   };
-  approvalRequests.set(request.id, request);
+  saveApprovalRequest(request);
   return request;
 }
 
 export function getApprovalRequest(
   approvalId: string,
 ): RemediationApprovalRequest | undefined {
-  return approvalRequests.get(approvalId);
+  return findApprovalRequest(approvalId);
 }
-
 export function listApprovalRequests(): RemediationApprovalRequest[] {
-  return Array.from(approvalRequests.values());
+  return loadApprovalRequests();
 }
-
 export function approveRemediation(
   approvalId: string,
   reviewedBy: string,
 ): RemediationApprovalRequest {
-  const request = approvalRequests.get(approvalId);
+  const request = findApprovalRequest(approvalId);
   if (!request) {
     throw new Error(`Approval request "${approvalId}" was not found.`);
   }
@@ -81,23 +79,36 @@ export function approveRemediation(
       `Approval request "${approvalId}" is already ${request.status}.`,
     );
   }
-
+  const currentPolicy = evaluateRemediationAction({
+    id: request.actionId,
+    title: request.actionTitle,
+    description: request.description,
+    command: request.command,
+    risk: request.risk,
+    requiresApproval: true,
+    reason: request.policy.reason,
+  });
+  if (currentPolicy.decision === "BLOCKED") {
+    throw new Error(
+      `Approval denied by current remediation policy: ${currentPolicy.reason}`,
+    );
+  }
   const updatedRequest: RemediationApprovalRequest = {
     ...request,
     status: "APPROVED",
     reviewedAt: new Date().toISOString(),
     reviewedBy,
+    policy: currentPolicy,
   };
-  approvalRequests.set(approvalId, updatedRequest);
+  saveApprovalRequest(updatedRequest);
   return updatedRequest;
 }
-
 export function rejectRemediation(
   approvalId: string,
   reviewedBy: string,
   reason: string,
 ): RemediationApprovalRequest {
-  const request = approvalRequests.get(approvalId);
+  const request = findApprovalRequest(approvalId);
   if (!request) {
     throw new Error(`Approval request "${approvalId}" was not found.`);
   }
@@ -106,7 +117,6 @@ export function rejectRemediation(
       `Approval request "${approvalId}" is already ${request.status}.`,
     );
   }
-
   const updatedRequest: RemediationApprovalRequest = {
     ...request,
     status: "REJECTED",
@@ -114,20 +124,21 @@ export function rejectRemediation(
     reviewedBy,
     rejectionReason: reason,
   };
-  approvalRequests.set(approvalId, updatedRequest);
+  saveApprovalRequest(updatedRequest);
   return updatedRequest;
 }
 export function isApprovedForExecution(approvalId: string): boolean {
-  const request = approvalRequests.get(approvalId);
+  const request = findApprovalRequest(approvalId);
   if (!request) {
     return false;
   }
-  if (request.status !== "APPROVED") {
-    return false;
-  }
-  return true;
+  return request.status === "APPROVED";
 }
-
+export function getPendingApprovals(): RemediationApprovalRequest[] {
+  return loadApprovalRequests().filter(
+    (request) => request.status === "PENDING",
+  );
+}
 export function clearApprovalRequests(): void {
-  approvalRequests.clear();
+  clearApprovalStore();
 }

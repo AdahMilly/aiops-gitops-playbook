@@ -7,13 +7,13 @@
       "severity": "High",
       "status": "Active",
       "firstSeen": "2026-08-12T13:07:31.000Z",
-      "lastSeen": "2026-08-19T12:27:15.000Z",
-      "occurrences": 14,
+      "lastSeen": "2026-08-20T12:38:17.000Z",
+      "occurrences": 16,
       "evidence": [
         "Node is not ready"
       ],
       "source": "Kubernetes",
-      "durationMs": 602384000
+      "durationMs": 689446000
     },
     {
       "id": "application-livenessprobefailure",
@@ -22,8 +22,8 @@
       "severity": "High",
       "status": "Active",
       "firstSeen": "2026-08-12T13:06:01.000Z",
-      "lastSeen": "2026-08-19T12:40:18.000Z",
-      "occurrences": 15,
+      "lastSeen": "2026-08-20T12:47:33.000Z",
+      "occurrences": 17,
       "evidence": [
         "Liveness probe failed: Get \"http://10.244.0.19:3000/\": context deadline exceeded (Client.Timeout exceeded while awaiting headers)",
         "Liveness probe failed: Get \"http://10.244.0.14:3000/\": context deadline exceeded (Client.Timeout exceeded while awaiting headers)",
@@ -31,17 +31,17 @@
         "Liveness probe failed: Get \"http://10.244.0.23:3000/\": context deadline exceeded (Client.Timeout exceeded while awaiting headers)"
       ],
       "source": "Application",
-      "durationMs": 603257000
+      "durationMs": 690092000
     },
     {
       "id": "application-readinessprobefailure",
       "issue": "ReadinessProbeFailure",
       "category": "Application",
       "severity": "High",
-      "status": "Resolved",
+      "status": "Active",
       "firstSeen": "2026-08-12T12:45:59.000Z",
-      "lastSeen": "2026-08-19T11:53:28.000Z",
-      "occurrences": 15,
+      "lastSeen": "2026-08-20T12:47:32.000Z",
+      "occurrences": 17,
       "evidence": [
         "Readiness probe failed: Get \"http://10.244.0.19:3000/\": context deadline exceeded (Client.Timeout exceeded while awaiting headers)",
         "Readiness probe failed: Get \"http://10.244.0.14:3000/\": context deadline exceeded (Client.Timeout exceeded while awaiting headers)",
@@ -51,9 +51,8 @@
         "Readiness probe failed: Get \"http://10.244.0.23:3000/\": context deadline exceeded (Client.Timeout exceeded while awaiting headers)"
       ],
       "source": "Application",
-      "durationMs": 605548542,
-      "resolvedAt": "2026-08-19T12:58:27.542Z"
+      "durationMs": 691293000
     }
   ],
-  "updatedAt": "2026-08-19T12:58:27.550Z"
+  "updatedAt": "2026-08-20T13:05:59.208Z"
 }

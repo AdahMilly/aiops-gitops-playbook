@@ -5,9 +5,17 @@ import type {
 import { evaluateRemediationAction } from "./remediationPolicy";
 import {
   requestRemediationApproval,
+  isApprovedForExecution,
   listApprovalRequests,
 } from "./remediationApproval";
+import {
+  executeKubernetesRemediation,
+  mapCommandToKubernetesRequest,
+} from "./kubernetesRemediationAdapter";
 
+export interface RemediationExecutionOptions {
+  approvalIds?: string[];
+}
 export type RemediationExecutionMode = "observe" | "dry-run" | "execute";
 export type RemediationActionStatus =
   | "Skipped"
@@ -49,6 +57,7 @@ export interface RemediationExecutionReport {
 export async function executeRemediationPlan(
   plan: AIRemediationPlan,
   mode: RemediationExecutionMode = "observe",
+  options: RemediationExecutionOptions = {},
 ): Promise<RemediationExecutionReport> {
   const startedAt = new Date().toISOString();
 
@@ -71,7 +80,7 @@ export async function executeRemediationPlan(
 
   const results: RemediationExecutionResult[] = [];
   for (const action of plan.actions) {
-    const result = await processAction(action, plan, mode);
+    const result = await processAction(action, plan, mode, options);
     results.push(result);
   }
   const completedAt = new Date().toISOString();
@@ -102,6 +111,7 @@ async function processAction(
   action: AIRemediationAction,
   plan: AIRemediationPlan,
   mode: RemediationExecutionMode,
+  options: RemediationExecutionOptions,
 ): Promise<RemediationExecutionResult> {
   const executedAt = new Date().toISOString();
 
@@ -137,20 +147,28 @@ async function processAction(
   }
 
   if (policy.decision === "REQUIRES_APPROVAL") {
+    const approvalIds = options.approvalIds ?? [];
     const approval = requestRemediationApproval(action);
-    return {
-      actionId: action.id,
-      title: action.title,
-      description: action.description,
-      status: "AwaitingApproval",
-      mode,
-      risk: action.risk,
-      requiresApproval: true,
-      message: "Remediation requires explicit human approval before execution.",
-      command: action.command,
-      approvalId: approval.id,
-      executedAt,
-    };
+    const approvedForExecution = approvalIds.some(
+      (approvalId) =>
+        approvalId === approval.id && isApprovedForExecution(approvalId),
+    );
+    if (!approvedForExecution) {
+      return {
+        actionId: action.id,
+        title: action.title,
+        description: action.description,
+        status: "AwaitingApproval",
+        mode,
+        risk: action.risk,
+        requiresApproval: true,
+        message:
+          "Remediation requires explicit human approval before execution.",
+        command: action.command,
+        approvalId: approval.id,
+        executedAt,
+      };
+    }
   }
 
   if (policy.decision === "DRY_RUN_ONLY") {
@@ -198,7 +216,9 @@ async function processAction(
       executedAt,
     };
   }
+const kubernetesRequest = mapCommandToKubernetesRequest(action.command);
 
+if (!kubernetesRequest) {
   return {
     actionId: action.id,
     title: action.title,
@@ -206,14 +226,41 @@ async function processAction(
     status: "Blocked",
     mode,
     risk: action.risk,
-    requiresApproval: false,
-    message:
-      "Infrastructure execution is currently disabled. The action passed policy validation but no execution adapter is enabled.",
+    requiresApproval: action.requiresApproval,
+    message: "Command is not supported by the Kubernetes remediation adapter.",
     command: action.command,
     executedAt,
   };
 }
 
+const execution = await executeKubernetesRemediation(kubernetesRequest);
+if (!execution.success) {
+  return {
+    actionId: action.id,
+    title: action.title,
+    description: action.description,
+    status: "Failed",
+    mode,
+    risk: action.risk,
+    requiresApproval: action.requiresApproval,
+    message: execution.error || "Kubernetes remediation failed.",
+    command: action.command,
+    executedAt,
+  };
+}
+return {
+  actionId: action.id,
+  title: action.title,
+  description: action.description,
+  status: "Executed",
+  mode,
+  risk: action.risk,
+  requiresApproval: action.requiresApproval,
+  message: "Kubernetes remediation executed successfully.",
+  command: action.command,
+  executedAt,
+};
+}
 export function getPendingApprovals() {
   return listApprovalRequests().filter(
     (request) => request.status === "PENDING",
