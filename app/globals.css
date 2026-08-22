@@ -1,0 +1,107 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 220 20% 8%;
+    --foreground: 213 31% 95%;
+    --card: 220 20% 11%;
+    --card-foreground: 213 31% 95%;
+    --popover: 220 20% 11%;
+    --popover-foreground: 213 31% 95%;
+    --primary: 213 94% 60%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 20% 16%;
+    --secondary-foreground: 213 31% 95%;
+    --muted: 220 20% 16%;
+    --muted-foreground: 218 11% 55%;
+    --accent: 38 92% 50%;
+    --accent-foreground: 220 20% 8%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 220 20% 18%;
+    --input: 220 20% 14%;
+    --ring: 213 94% 60%;
+    --success: 142 71% 45%;
+    --warning: 38 92% 50%;
+    --radius: 0.5rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+    box-sizing: border-box;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+  ::selection {
+    @apply bg-primary/30 text-foreground;
+  }
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-border;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-muted-foreground/40;
+  }
+}
+
+@layer utilities {
+  .font-sans {
+    font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
+  }
+
+  .animate-fade-in {
+    animation: fadeIn 0.25s ease-out forwards;
+  }
+  .animate-slide-up {
+    animation: slideUp 0.25s ease-out forwards;
+  }
+  .animate-scale-in {
+    animation: scaleIn 0.2s ease-out forwards;
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* Severity pills */
+.severity-low    { @apply bg-emerald-500/10 text-emerald-400 border-emerald-500/25; }
+.severity-medium { @apply bg-amber-500/10 text-amber-400 border-amber-500/25; }
+.severity-high   { @apply bg-orange-500/10 text-orange-400 border-orange-500/25; }
+.severity-critical { @apply bg-red-500/10 text-red-400 border-red-500/25; }
+
+/* Status pills */
+.status-open          { @apply bg-slate-500/10 text-slate-400 border-slate-500/25; }
+.status-investigating { @apply bg-blue-500/10 text-blue-400 border-blue-500/25; }
+.status-identified    { @apply bg-violet-500/10 text-violet-400 border-violet-500/25; }
+.status-monitoring    { @apply bg-cyan-500/10 text-cyan-400 border-cyan-500/25; }
+.status-resolved      { @apply bg-emerald-500/10 text-emerald-400 border-emerald-500/25; }
+.status-closed        { @apply bg-gray-500/10 text-gray-400 border-gray-500/25; }
+
+/* Card hover micro-interaction */
+.card-hover {
+  @apply transition-all duration-200 hover:border-border/80 hover:shadow-lg hover:shadow-black/20;
+}
