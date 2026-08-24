@@ -8,7 +8,6 @@ export type RemediationPolicyDecision =
   | "DRY_RUN_ONLY"
   | "REQUIRES_APPROVAL"
   | "BLOCKED";
-
 export interface RemediationPolicyResult {
   actionId: string;
   decision: RemediationPolicyDecision;
@@ -18,24 +17,20 @@ export interface RemediationPolicyResult {
   command?: string;
   evaluatedAt: string;
 }
-
 export interface RemediationPolicyConfig {
   executionEnabled?: boolean;
   safeCommands?: string[];
   approvalCommands?: string[];
   blockedCommands?: string[];
 }
-
 const DEFAULT_POLICY: Required<RemediationPolicyConfig> = {
   executionEnabled: false,
-
   safeCommands: [
     "kubectl get",
     "kubectl describe",
     "kubectl logs",
     "kubectl top",
   ],
-
   approvalCommands: [
     "kubectl rollout restart",
     "kubectl scale",
@@ -45,7 +40,6 @@ const DEFAULT_POLICY: Required<RemediationPolicyConfig> = {
     "kubectl patch",
     "kubectl apply",
   ],
-
   blockedCommands: [
     "kubectl delete",
     "kubectl replace --force",
@@ -64,14 +58,12 @@ const DEFAULT_POLICY: Required<RemediationPolicyConfig> = {
     "format",
   ],
 };
-
 export function evaluateRemediationAction(
   action: AIRemediationAction,
   config: RemediationPolicyConfig = {},
 ): RemediationPolicyResult {
   const policy = mergePolicy(config);
   const evaluatedAt = new Date().toISOString();
-
   if (!action.command) {
     return {
       actionId: action.id,
@@ -82,10 +74,8 @@ export function evaluateRemediationAction(
       evaluatedAt,
     };
   }
-
   const command = normalizeCommand(action.command);
   const blockedCommand = findMatchingCommand(command, policy.blockedCommands);
-
   if (blockedCommand) {
     return {
       actionId: action.id,
@@ -97,7 +87,6 @@ export function evaluateRemediationAction(
       evaluatedAt,
     };
   }
-
   if (action.risk === "critical") {
     return {
       actionId: action.id,
@@ -110,7 +99,6 @@ export function evaluateRemediationAction(
       evaluatedAt,
     };
   }
-
   if (action.risk === "high" || action.requiresApproval) {
     return {
       actionId: action.id,
@@ -124,7 +112,6 @@ export function evaluateRemediationAction(
     };
   }
   const approvalCommand = findMatchingCommand(command, policy.approvalCommands);
-
   if (approvalCommand) {
     return {
       actionId: action.id,
@@ -136,9 +123,7 @@ export function evaluateRemediationAction(
       evaluatedAt,
     };
   }
-
   const safeCommand = findMatchingCommand(command, policy.safeCommands);
-
   if (safeCommand) {
     if (!policy.executionEnabled) {
       return {
@@ -152,7 +137,6 @@ export function evaluateRemediationAction(
         evaluatedAt,
       };
     }
-
     return {
       actionId: action.id,
       decision: "SAFE",
@@ -180,19 +164,15 @@ export function evaluateRemediationActions(
 ): RemediationPolicyResult[] {
   return actions.map((action) => evaluateRemediationAction(action, config));
 }
-
 export function isRemediationAllowed(
   action: AIRemediationAction,
   config: RemediationPolicyConfig = {},
 ): boolean {
-  const result = evaluateRemediationAction(action, config);
-  return result.allowed;
+  return evaluateRemediationAction(action, config).allowed;
 }
-
 function normalizeCommand(command: string): string {
   return command.trim().replace(/\s+/g, " ").toLowerCase();
 }
-
 function findMatchingCommand(
   command: string,
   commands: string[],
@@ -205,7 +185,6 @@ function findMatchingCommand(
     );
   });
 }
-
 function mergePolicy(
   config: RemediationPolicyConfig,
 ): Required<RemediationPolicyConfig> {
