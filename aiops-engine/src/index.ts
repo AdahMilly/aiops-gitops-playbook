@@ -1,14 +1,17 @@
 import { collectTelemetry } from "./collectors/telemetryCollector";
 import { analyze } from "./analyzers/healthAnalyzer";
 import { generateIncidentReport } from "./engines/generateIncidentReport";
-
 import {
   loadIncidentState,
   saveIncidentState,
 } from "./state/incidentStateStore";
-
 import { orchestrateAILayer } from "./ai/aiOrchestrator";
 import { buildAIRemediationPlan } from "./ai/aiRemediationPlanner";
+import {
+  executeRemediationPlan,
+  type RemediationExecutionReport,
+} from "./ai/remediationExecutor";
+import { getPendingApprovals } from "./ai/remediationApproval";
 
 async function main() {
   console.log("\n=====================================");
@@ -26,7 +29,9 @@ async function main() {
     telemetry,
     previousIncidents,
   });
+
   saveIncidentState(report.incidentLifecycle.incidents);
+
   console.log(
     `Incident state saved: ${report.incidentLifecycle.activeIncidents.length} active incidents.\n`,
   );
@@ -113,7 +118,6 @@ async function main() {
   console.log("\n=====================================");
   console.log("RECOMMENDATIONS");
   console.log("=====================================");
-
   report.recommendations.forEach((recommendation) => {
     console.log(`\n[${recommendation.priority}] ${recommendation.issue}`);
     recommendation.actions.forEach((action, index) => {
@@ -134,11 +138,9 @@ async function main() {
       Title: entry.title,
     })),
   );
-
   console.log("\n=====================================");
   console.log("INCIDENT LIFECYCLE");
   console.log("=====================================");
-
   console.table(
     report.incidentLifecycle.incidents.map((incident) => ({
       Issue: incident.issue,
@@ -150,13 +152,10 @@ async function main() {
       LastSeen: incident.lastSeen,
     })),
   );
-
   console.log("\n=====================================");
   console.log("AI INCIDENT INTELLIGENCE");
   console.log("=====================================\n");
-
   console.log("Passing incident report to AI orchestrator...\n");
-
   let aiResult;
   try {
     aiResult = await orchestrateAILayer(report);
@@ -170,68 +169,103 @@ async function main() {
         console.log(`AI reason: ${aiResult.error}\n`);
       }
     }
-  } catch (error: any) {
+  } catch (error) {
     console.error("\nAI orchestration failed.");
     console.error(error);
     aiResult = {
       available: false,
-      provider: "openai",
+      provider: "openai" as const,
       error: "AI orchestration failed",
       analysis: null,
     };
   }
-
   console.log("=====================================");
   console.log("AI REMEDIATION PLANNER");
   console.log("=====================================\n");
-
   const remediationPlan = aiResult.analysis
     ? buildAIRemediationPlan(aiResult.analysis)
     : null;
-  let remediationExecution = null;
+  let remediationExecution: RemediationExecutionReport | null = null;
   if (remediationPlan) {
     console.log("\n=====================================");
     console.log("AI REMEDIATION PLAN");
     console.log("=====================================\n");
-
     console.log(`Priority: ${remediationPlan.priority}`);
     console.log(`Problem: ${remediationPlan.problem}`);
     console.log(`Diagnosis: ${remediationPlan.diagnosis}\n`);
-
     remediationPlan.actions.forEach((action, index) => {
       console.log(`Action ${index + 1}`);
       console.log(`  Title: ${action.title}`);
       console.log(`  Risk: ${action.risk}`);
       console.log(`  Requires Approval: ${action.requiresApproval}`);
-
       if (action.command) {
         console.log(`  Command: ${action.command}`);
       }
-
       console.log(`  Reason: ${action.reason}`);
       console.log("");
     });
-
     console.log("=====================================");
+    console.log("REMEDIATION EXECUTION");
+    console.log("=====================================\n");
+    console.log("Running remediation planner in OBSERVE mode.\n");
+    try {
+      remediationExecution = await executeRemediationPlan(
+        remediationPlan,
+        "observe",
+      );
+      console.log(`Executed: ${remediationExecution.executedCount}`);
+      console.log(`Validated: ${remediationExecution.validatedCount}`);
+      console.log(`Skipped: ${remediationExecution.skippedCount}`);
+      console.log(`Blocked: ${remediationExecution.blockedCount}`);
+      console.log(`Failed: ${remediationExecution.failedCount}`);
+      console.log(
+        `Awaiting Approval: ${remediationExecution.awaitingApprovalCount}`,
+      );
+      console.log("");
+      if (remediationExecution.results.length > 0) {
+        console.table(
+          remediationExecution.results.map((result) => ({
+            Action: result.title,
+            Risk: result.risk,
+            Status: result.status,
+            Approval: result.approvalId ?? "-",
+            Command: result.command ?? "-",
+            Message: result.message,
+          })),
+        );
+      }
+    } catch (error) {
+      console.error("\nRemediation execution layer failed.");
+      console.error(error);
+    }
+    console.log("\n=====================================");
     console.log("REMEDIATION APPROVAL STATUS");
     console.log("=====================================\n");
-    const { getPendingApprovals } = await import("./ai/remediationApproval");
-    const pendingApprovals = getPendingApprovals();
-    if (pendingApprovals.length === 0) {
-      console.log("No pending remediation approvals.");
-    } else {
-      console.table(
-        pendingApprovals.map((approval) => ({
-          ApprovalId: approval.id,
-          Action: approval.actionTitle,
-          Risk: approval.risk,
-          Status: approval.status,
-          RequestedAt: approval.requestedAt,
-        })),
-      );
+    try {
+      const pendingApprovals = getPendingApprovals();
+      if (pendingApprovals.length === 0) {
+        console.log("No pending remediation approvals.");
+      } else {
+        console.table(
+          pendingApprovals.map((approval) => ({
+            ApprovalId: approval.id,
+            Action: approval.actionTitle,
+            Risk: approval.risk,
+            Status: approval.status,
+            RequestedAt: approval.requestedAt,
+          })),
+        );
+      }
+    } catch (error) {
+      console.error("Failed to load remediation approvals.");
+      console.error(error);
     }
+  } else {
+    console.log(
+      "No AI remediation plan was generated because AI analysis is unavailable.",
+    );
   }
-  console.log("=====================================");
+  console.log("\n=====================================");
   console.log("FULL INCIDENT REPORT");
   console.log("=====================================\n");
   const finalReport = {
@@ -247,7 +281,6 @@ async function main() {
   console.log("PIPELINE COMPLETED SUCCESSFULLY");
   console.log("=====================================\n");
 }
-
 main().catch((error) => {
   console.error("\nPipeline failed.\n");
   console.error(error);
