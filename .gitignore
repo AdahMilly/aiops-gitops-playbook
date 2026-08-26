@@ -32,6 +32,7 @@ yarn-error.log*
 **/.env
 **/.env.*
 
+**/data/remediation-audit.json
 # vercel
 .vercel
 

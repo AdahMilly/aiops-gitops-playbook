@@ -12,19 +12,21 @@ import {
   executeKubernetesRemediation,
   mapCommandToKubernetesRequest,
 } from "./kubernetesRemediationAdapter";
-
+import {
+  createRemediationAuditEntry,
+  saveRemediationAudit,
+} from "./remediationAuditStore";
+import type {
+  RemediationExecutionMode,
+  RemediationActionStatus,
+} from "./remediationTypes";
+export type {
+  RemediationExecutionMode,
+  RemediationActionStatus,
+} from "./remediationTypes";
 export interface RemediationExecutionOptions {
   approvalIds?: string[];
 }
-export type RemediationExecutionMode = "observe" | "dry-run" | "execute";
-export type RemediationActionStatus =
-  | "Skipped"
-  | "Validated"
-  | "Executed"
-  | "Failed"
-  | "Blocked"
-  | "AwaitingApproval";
-
 export interface RemediationExecutionResult {
   actionId: string;
   title: string;
@@ -37,7 +39,10 @@ export interface RemediationExecutionResult {
   command?: string;
   approvalId?: string;
   executedAt: string;
+  output?: string;
+  error?: string;
 }
+
 export interface RemediationExecutionReport {
   available: boolean;
   mode: RemediationExecutionMode;
@@ -52,6 +57,7 @@ export interface RemediationExecutionReport {
   failedCount: number;
   awaitingApprovalCount: number;
 }
+
 export async function executeRemediationPlan(
   plan: AIRemediationPlan,
   mode: RemediationExecutionMode = "observe",
@@ -76,26 +82,8 @@ export async function executeRemediationPlan(
   }
   const results: RemediationExecutionResult[] = [];
   for (const action of plan.actions) {
-    try {
-      const result = await processAction(action, plan, mode, options);
-      results.push(result);
-    } catch (error) {
-      results.push({
-        actionId: action.id,
-        title: action.title,
-        description: action.description,
-        status: "Failed",
-        mode,
-        risk: action.risk,
-        requiresApproval: action.requiresApproval,
-        message:
-          error instanceof Error
-            ? error.message
-            : "Unexpected remediation execution error.",
-        command: action.command,
-        executedAt: new Date().toISOString(),
-      });
-    }
+    const result = await processAction(action, plan, mode, options);
+    results.push(result);
   }
   const completedAt = new Date().toISOString();
   return {
@@ -127,7 +115,7 @@ async function processAction(
 ): Promise<RemediationExecutionResult> {
   const executedAt = new Date().toISOString();
   if (!action.command) {
-    return {
+    const result: RemediationExecutionResult = {
       actionId: action.id,
       title: action.title,
       description: action.description,
@@ -139,34 +127,35 @@ async function processAction(
         "No executable command was identified. Action remains informational.",
       executedAt,
     };
+    writeAudit(action, "BLOCKED", result);
+    return result;
   }
-  const policy = evaluateRemediationAction(action);
-  if (policy.decision === "BLOCKED") {
-    return {
+  const initialPolicy = evaluateRemediationAction(action);
+  if (initialPolicy.decision === "BLOCKED") {
+    const result: RemediationExecutionResult = {
       actionId: action.id,
       title: action.title,
       description: action.description,
       status: "Blocked",
       mode,
       risk: action.risk,
-      requiresApproval: policy.requiresApproval,
-      message: policy.reason,
+      requiresApproval: initialPolicy.requiresApproval,
+      message: initialPolicy.reason,
       command: action.command,
       executedAt,
     };
+    writeAudit(action, initialPolicy.decision, result);
+    return result;
   }
   let approvalId: string | undefined;
-  if (policy.decision === "REQUIRES_APPROVAL") {
-    const suppliedApprovalIds = options.approvalIds ?? [];
-    const approvedRequest = findApprovedRequestForAction(
-      action,
-      suppliedApprovalIds,
+  if (initialPolicy.decision === "REQUIRES_APPROVAL") {
+    const approval = requestRemediationApproval(action);
+    approvalId = approval.id;
+    const approvedForExecution = (options.approvalIds ?? []).some(
+      (id) => id === approval.id && isApprovedForExecution(id),
     );
-    if (approvedRequest) {
-      approvalId = approvedRequest.id;
-    } else {
-      const approvalRequest = requestRemediationApproval(action);
-      return {
+    if (!approvedForExecution) {
+      const result: RemediationExecutionResult = {
         actionId: action.id,
         title: action.title,
         description: action.description,
@@ -177,134 +166,175 @@ async function processAction(
         message:
           "Remediation requires explicit human approval before execution.",
         command: action.command,
-        approvalId: approvalRequest.id,
+        approvalId,
         executedAt,
       };
+      writeAudit(action, initialPolicy.decision, result);
+      return result;
     }
   }
-  if (policy.decision === "DRY_RUN_ONLY") {
-    return {
+  const finalPolicy = evaluateRemediationAction(action);
+  if (finalPolicy.decision === "BLOCKED") {
+    const result: RemediationExecutionResult = {
       actionId: action.id,
       title: action.title,
       description: action.description,
-      status: mode === "dry-run" ? "Validated" : "Skipped",
+      status: "Blocked",
       mode,
       risk: action.risk,
-      requiresApproval: false,
-      message: policy.reason,
+      requiresApproval: finalPolicy.requiresApproval,
+      message: `Execution blocked by current remediation policy: ${finalPolicy.reason}`,
       command: action.command,
+      approvalId,
       executedAt,
     };
+    writeAudit(action, finalPolicy.decision, result);
+    return result;
   }
   if (mode === "observe") {
-    return {
+    const result: RemediationExecutionResult = {
       actionId: action.id,
       title: action.title,
       description: action.description,
       status: "Skipped",
       mode,
       risk: action.risk,
-      requiresApproval: Boolean(approvalId),
+      requiresApproval: finalPolicy.requiresApproval,
       message: "Action observed only. No infrastructure changes were made.",
       command: action.command,
       approvalId,
       executedAt,
     };
+    writeAudit(action, finalPolicy.decision, result);
+    return result;
   }
   if (mode === "dry-run") {
-    return {
+    const kubernetesRequest = mapCommandToKubernetesRequest(action.command);
+    if (!kubernetesRequest) {
+      const result: RemediationExecutionResult = {
+        actionId: action.id,
+        title: action.title,
+        description: action.description,
+        status: "Blocked",
+        mode,
+        risk: action.risk,
+        requiresApproval: finalPolicy.requiresApproval,
+        message:
+          "Command is not supported by the Kubernetes remediation adapter.",
+        command: action.command,
+        approvalId,
+        executedAt,
+      };
+      writeAudit(action, finalPolicy.decision, result);
+      return result;
+    }
+    const result: RemediationExecutionResult = {
       actionId: action.id,
       title: action.title,
       description: action.description,
       status: "Validated",
       mode,
       risk: action.risk,
-      requiresApproval: Boolean(approvalId),
+      requiresApproval: finalPolicy.requiresApproval,
       message:
-        "Action validated successfully in dry-run mode. No infrastructure changes were made.",
+        "Remediation command passed policy and Kubernetes adapter validation in dry-run mode. No infrastructure changes were made.",
       command: action.command,
       approvalId,
       executedAt,
     };
-  }
-  if (mode !== "execute") {
-    return {
-      actionId: action.id,
-      title: action.title,
-      description: action.description,
-      status: "Blocked",
-      mode,
-      risk: action.risk,
-      requiresApproval: action.requiresApproval,
-      message:
-        "Unknown remediation execution mode. Infrastructure execution was blocked.",
-      command: action.command,
-      approvalId,
-      executedAt,
-    };
+    writeAudit(action, finalPolicy.decision, result);
+    return result;
   }
   const kubernetesRequest = mapCommandToKubernetesRequest(action.command);
   if (!kubernetesRequest) {
-    return {
+    const result: RemediationExecutionResult = {
       actionId: action.id,
       title: action.title,
       description: action.description,
       status: "Blocked",
       mode,
       risk: action.risk,
-      requiresApproval: Boolean(approvalId),
+      requiresApproval: finalPolicy.requiresApproval,
       message:
         "Command is not supported by the Kubernetes remediation adapter.",
       command: action.command,
       approvalId,
       executedAt,
     };
+    writeAudit(action, finalPolicy.decision, result);
+    return result;
   }
-  const execution = await executeKubernetesRemediation(kubernetesRequest);
-  if (!execution.success) {
-    return {
+  try {
+    const execution = await executeKubernetesRemediation(kubernetesRequest);
+    if (!execution.success) {
+      const result: RemediationExecutionResult = {
+        actionId: action.id,
+        title: action.title,
+        description: action.description,
+        status: "Failed",
+        mode,
+        risk: action.risk,
+        requiresApproval: finalPolicy.requiresApproval,
+        message: execution.error || "Kubernetes remediation failed.",
+        command: action.command,
+        approvalId,
+        executedAt,
+        output: execution.output,
+        error: execution.error,
+      };
+      writeAudit(action, finalPolicy.decision, result);
+      return result;
+    }
+    const result: RemediationExecutionResult = {
+      actionId: action.id,
+      title: action.title,
+      description: action.description,
+      status: "Executed",
+      mode,
+      risk: action.risk,
+      requiresApproval: finalPolicy.requiresApproval,
+      message: "Kubernetes remediation executed successfully.",
+      command: action.command,
+      approvalId,
+      executedAt,
+      output: execution.output,
+    };
+    writeAudit(action, finalPolicy.decision, result);
+    return result;
+  } catch (error: any) {
+    const result: RemediationExecutionResult = {
       actionId: action.id,
       title: action.title,
       description: action.description,
       status: "Failed",
       mode,
       risk: action.risk,
-      requiresApproval: Boolean(approvalId),
-      message: execution.error || "Kubernetes remediation failed.",
+      requiresApproval: finalPolicy.requiresApproval,
+      message: error?.message || "Unexpected Kubernetes remediation error.",
       command: action.command,
       approvalId,
       executedAt,
+      error: error?.message,
     };
+    writeAudit(action, finalPolicy.decision, result);
+    return result;
   }
-  return {
-    actionId: action.id,
-    title: action.title,
-    description: action.description,
-    status: "Executed",
-    mode,
-    risk: action.risk,
-    requiresApproval: Boolean(approvalId),
-    message: "Kubernetes remediation executed successfully.",
-    command: action.command,
-    approvalId,
-    executedAt,
-  };
 }
-function findApprovedRequestForAction(
+function writeAudit(
   action: AIRemediationAction,
-  approvalIds: string[],
-) {
-  if (approvalIds.length === 0) {
-    return undefined;
-  }
-  const approvalRequests = listApprovalRequests();
-  return approvalRequests.find(
-    (request) =>
-      request.actionId === action.id &&
-      request.status === "APPROVED" &&
-      approvalIds.includes(request.id) &&
-      isApprovedForExecution(request.id),
-  );
+  policyDecision: "SAFE" | "DRY_RUN_ONLY" | "REQUIRES_APPROVAL" | "BLOCKED",
+  result: RemediationExecutionResult,
+): void {
+  const auditEntry = createRemediationAuditEntry(action, {
+    policyDecision,
+    mode: result.mode,
+    status: result.status,
+    message: result.message,
+    approvalId: result.approvalId,
+    output: result.output,
+    error: result.error,
+  });
+  saveRemediationAudit(auditEntry);
 }
 export function getPendingApprovals() {
   return listApprovalRequests().filter(

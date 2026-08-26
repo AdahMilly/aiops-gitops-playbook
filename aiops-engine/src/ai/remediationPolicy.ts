@@ -188,9 +188,10 @@ function findMatchingCommand(
 function mergePolicy(
   config: RemediationPolicyConfig,
 ): Required<RemediationPolicyConfig> {
+  const environmentExecutionEnabled =
+    process.env.AIOPS_REMEDIATION_ENABLED === "true";
   return {
-    executionEnabled:
-      config.executionEnabled ?? DEFAULT_POLICY.executionEnabled,
+    executionEnabled: config.executionEnabled ?? environmentExecutionEnabled,
     safeCommands: config.safeCommands ?? DEFAULT_POLICY.safeCommands,
     approvalCommands:
       config.approvalCommands ?? DEFAULT_POLICY.approvalCommands,
