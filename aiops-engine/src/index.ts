@@ -29,15 +29,14 @@ async function main() {
     telemetry,
     previousIncidents,
   });
-
   saveIncidentState(report.incidentLifecycle.incidents);
-
   console.log(
     `Incident state saved: ${report.incidentLifecycle.activeIncidents.length} active incidents.\n`,
   );
   console.log("=====================================");
   console.log("INCIDENT SUMMARY");
   console.log("=====================================");
+
   console.table({
     Score: report.summary.score,
     Level: report.summary.level,
@@ -160,7 +159,12 @@ async function main() {
   try {
     aiResult = await orchestrateAILayer(report);
     if (aiResult.available) {
-      console.log("AI analysis completed successfully.\n");
+      console.log("AI analysis completed successfully.");
+      console.log(`Provider: ${aiResult.provider}`);
+      if (aiResult.error) {
+        console.log(`AI fallback reason: ${aiResult.error}`);
+      }
+      console.log("");
     } else {
       console.log(
         "AI analysis unavailable. Continuing with deterministic intelligence.\n",
@@ -174,7 +178,7 @@ async function main() {
     console.error(error);
     aiResult = {
       available: false,
-      provider: "openai" as const,
+      provider: "unavailable",
       error: "AI orchestration failed",
       analysis: null,
     };
@@ -193,6 +197,9 @@ async function main() {
     console.log(`Priority: ${remediationPlan.priority}`);
     console.log(`Problem: ${remediationPlan.problem}`);
     console.log(`Diagnosis: ${remediationPlan.diagnosis}\n`);
+    if (remediationPlan.actions.length === 0) {
+      console.log("No remediation actions were generated.\n");
+    }
     remediationPlan.actions.forEach((action, index) => {
       console.log(`Action ${index + 1}`);
       console.log(`  Title: ${action.title}`);
@@ -204,10 +211,20 @@ async function main() {
       console.log(`  Reason: ${action.reason}`);
       console.log("");
     });
+    if (remediationPlan.blockedActions.length > 0) {
+      console.log("=====================================");
+      console.log("BLOCKED REMEDIATION ACTIONS");
+      console.log("=====================================\n");
+      remediationPlan.blockedActions.forEach((action) => {
+        console.log(` • ${action}`);
+      });
+      console.log("");
+    }
     console.log("=====================================");
     console.log("REMEDIATION EXECUTION");
     console.log("=====================================\n");
-    console.log("Running remediation planner in OBSERVE mode.\n");
+    console.log("Running remediation planner in OBSERVE mode.");
+    console.log("No infrastructure changes will be performed.\n");
     try {
       remediationExecution = await executeRemediationPlan(
         remediationPlan,

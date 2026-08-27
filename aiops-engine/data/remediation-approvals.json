@@ -1,0 +1,21 @@
+[
+  {
+    "id": "approval-kubectl-rollout-restart-deployment-aiops-engine-4-1787833598768",
+    "actionId": "kubectl-rollout-restart-deployment-aiops-engine-4",
+    "actionTitle": "kubectl rollout restart deployment/aiops-engine",
+    "description": "kubectl rollout restart deployment/aiops-engine",
+    "command": "kubectl rollout restart deployment/aiops-engine",
+    "risk": "high",
+    "status": "PENDING",
+    "requestedAt": "2026-08-27T12:26:38.768Z",
+    "policy": {
+      "actionId": "kubectl-rollout-restart-deployment-aiops-engine-4",
+      "decision": "REQUIRES_APPROVAL",
+      "allowed": false,
+      "requiresApproval": true,
+      "reason": "This remediation action requires explicit human approval before execution.",
+      "command": "kubectl rollout restart deployment/aiops-engine",
+      "evaluatedAt": "2026-08-27T12:26:38.767Z"
+    }
+  }
+]
