@@ -1,8 +1,6 @@
 import { execFile } from "child_process";
 import { promisify } from "util";
-
 const execFileAsync = promisify(execFile);
-
 export type KubernetesRemediationOperation =
   | "get-nodes"
   | "describe-nodes"
@@ -14,6 +12,7 @@ export type KubernetesRemediationOperation =
   | "restart-deployment"
   | "scale-deployment";
 
+export type RemediationExecutionMode = "observe" | "dry-run" | "execute";
 export interface KubernetesRemediationRequest {
   operation: KubernetesRemediationOperation;
   namespace?: string;
@@ -23,13 +22,19 @@ export interface KubernetesRemediationRequest {
   container?: string;
   tailLines?: number;
 }
+export interface KubernetesRemediationExecutionRequest extends KubernetesRemediationRequest {
+  mode?: RemediationExecutionMode;
+}
 export interface KubernetesRemediationResult {
   success: boolean;
   operation: KubernetesRemediationOperation;
+  mode: RemediationExecutionMode;
+  command: string;
   output: string;
   error?: string;
   executedAt: string;
   durationMs: number;
+  executed: boolean;
 }
 const ALLOWED_OPERATIONS: KubernetesRemediationOperation[] = [
   "get-nodes",
@@ -44,9 +49,8 @@ const ALLOWED_OPERATIONS: KubernetesRemediationOperation[] = [
 ];
 const COMMAND_TIMEOUT_MS = 30_000;
 const MAX_OUTPUT_SIZE = 1024 * 1024;
-const SAFE_NAME_PATTERN = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/;
+const SAFE_NAME_PATTERN = /^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$/;
 const MAX_NAME_LENGTH = 253;
-
 function validateKubernetesName(value: string, fieldName: string): void {
   if (!value) {
     throw new Error(`${fieldName} is required.`);
@@ -193,45 +197,205 @@ function buildKubectlArguments(
       );
   }
 }
-export async function executeKubernetesRemediation(
+function buildKubectlCommand(args: string[]): string {
+  return ["kubectl", ...args]
+    .map((value) => {
+      if (/^[a-zA-Z0-9._=/:+-]+$/.test(value)) {
+        return value;
+      }
+      return `"${value.replace(/"/g, '\\"')}"`;
+    })
+    .join(" ");
+}
+function getDefaultExecutionMode(): RemediationExecutionMode {
+  const configuredMode =
+    process.env.AIOPS_REMEDIATION_MODE?.trim().toLowerCase();
+  if (
+    configuredMode === "observe" ||
+    configuredMode === "dry-run" ||
+    configuredMode === "execute"
+  ) {
+    return configuredMode;
+  }
+  return "observe";
+}
+function isReadOnlyOperation(
+  operation: KubernetesRemediationOperation,
+): boolean {
+  return (
+    operation === "get-nodes" ||
+    operation === "describe-nodes" ||
+    operation === "get-pods" ||
+    operation === "describe-pod" ||
+    operation === "get-deployment" ||
+    operation === "describe-deployment" ||
+    operation === "get-logs"
+  );
+}
+function isExecutionEnabled(): boolean {
+  return process.env.AIOPS_REMEDIATION_ENABLED === "true";
+}
+export function previewKubernetesRemediation(
   request: KubernetesRemediationRequest,
+): {
+  operation: KubernetesRemediationOperation;
+  command: string;
+  args: string[];
+} {
+  if (!ALLOWED_OPERATIONS.includes(request.operation)) {
+    throw new Error("Kubernetes remediation operation is not allowlisted.");
+  }
+  const args = buildKubectlArguments(request);
+  return {
+    operation: request.operation,
+    command: buildKubectlCommand(args),
+    args,
+  };
+}
+export async function executeKubernetesRemediation(
+  request: KubernetesRemediationExecutionRequest,
 ): Promise<KubernetesRemediationResult> {
   const startedAt = Date.now();
   const executedAt = new Date().toISOString();
+  const mode = request.mode ?? getDefaultExecutionMode();
   if (!ALLOWED_OPERATIONS.includes(request.operation)) {
     return {
       success: false,
       operation: request.operation,
+      mode,
+      command: "",
       output: "",
       error: "Kubernetes remediation operation is not allowlisted.",
       executedAt,
       durationMs: Date.now() - startedAt,
+      executed: false,
     };
   }
+  let args: string[];
   try {
-    const args = buildKubectlArguments(request);
-    const { stdout, stderr } = await execFileAsync("kubectl", args, {
-      windowsHide: true,
-      timeout: COMMAND_TIMEOUT_MS,
-      maxBuffer: MAX_OUTPUT_SIZE,
-    });
-    return {
-      success: true,
-      operation: request.operation,
-      output: stdout || stderr || "",
-      executedAt,
-      durationMs: Date.now() - startedAt,
-    };
-  } catch (error: any) {
+    args = buildKubectlArguments(request);
+  } catch (error: unknown) {
     return {
       success: false,
       operation: request.operation,
-      output: error?.stdout || "",
-      error: error?.stderr || error?.message || "Kubernetes command failed.",
+      mode,
+      command: "",
+      output: "",
+      error:
+        error instanceof Error
+          ? error.message
+          : "Invalid Kubernetes remediation request.",
       executedAt,
       durationMs: Date.now() - startedAt,
+      executed: false,
     };
   }
+  const command = buildKubectlCommand(args);
+  const readOnly = isReadOnlyOperation(request.operation);
+  if (mode === "observe") {
+    return {
+      success: true,
+      operation: request.operation,
+      mode,
+      command,
+      output: "",
+      error: undefined,
+      executedAt,
+      durationMs: Date.now() - startedAt,
+      executed: false,
+    };
+  }
+  if (mode === "dry-run") {
+    return {
+      success: true,
+      operation: request.operation,
+      mode,
+      command,
+      output: `DRY RUN: ${command}`,
+      executedAt,
+      durationMs: Date.now() - startedAt,
+      executed: false,
+    };
+  if (mode === "execute") {
+    if (!readOnly && !isExecutionEnabled()) {
+      return {
+        success: false,
+        operation: request.operation,
+        mode,
+        command,
+        output: "",
+        error:
+          "Infrastructure remediation execution is disabled. Set AIOPS_REMEDIATION_ENABLED=true before executing mutating Kubernetes operations.",
+        executedAt,
+        durationMs: Date.now() - startedAt,
+        executed: false,
+      };
+    }
+    try {
+      const { stdout, stderr } = await execFileAsync("kubectl", args, {
+        windowsHide: true,
+        timeout: COMMAND_TIMEOUT_MS,
+        maxBuffer: MAX_OUTPUT_SIZE,
+      });
+      return {
+        success: true,
+        operation: request.operation,
+        mode,
+        command,
+        output: stdout || stderr || "",
+        executedAt,
+        durationMs: Date.now() - startedAt,
+        executed: true,
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        operation: request.operation,
+        mode,
+        command,
+        output: error?.stdout || "",
+        error: error?.stderr || error?.message || "Kubernetes command failed.",
+        executedAt,
+        durationMs: Date.now() - startedAt,
+        executed: true,
+      };
+    }
+  }
+  return {
+    success: false,
+    operation: request.operation,
+    mode,
+    command,
+    output: "",
+    error: `Unsupported remediation execution mode: ${mode}`,
+    executedAt,
+    durationMs: Date.now() - startedAt,
+    executed: false,
+  };
+}
+export async function observeKubernetesRemediation(
+  request: KubernetesRemediationRequest,
+): Promise<KubernetesRemediationResult> {
+  return executeKubernetesRemediation({
+    ...request,
+    mode: "observe",
+  });
+}
+export async function dryRunKubernetesRemediation(
+  request: KubernetesRemediationRequest,
+): Promise<KubernetesRemediationResult> {
+  return executeKubernetesRemediation({
+    ...request,
+    mode: "dry-run",
+  });
+}
+export async function runKubernetesRemediation(
+  request: KubernetesRemediationRequest,
+): Promise<KubernetesRemediationResult> {
+  return executeKubernetesRemediation({
+    ...request,
+    mode: "execute",
+  });
 }
 export function mapCommandToKubernetesRequest(
   command: string,
@@ -251,7 +415,7 @@ export function mapCommandToKubernetesRequest(
     };
   }
   const getPodsMatch = normalized.match(
-    /^kubectl\s+get\s+pods(?:\s+-n\s+([a-z0-9][-a-z0-9]*))?$/i,
+    /^kubectl\s+get\s+pods(?:\s+-n\s+([a-z0-9](?:[-a-z0-9]*[a-z0-9])?))?$/i,
   );
   if (getPodsMatch) {
     return {
@@ -260,7 +424,7 @@ export function mapCommandToKubernetesRequest(
     };
   }
   const describePodMatch = normalized.match(
-    /^kubectl\s+describe\s+pod\s+([a-z0-9][-a-z0-9]*)(?:\s+-n\s+([a-z0-9][-a-z0-9]*))?$/i,
+    /^kubectl\s+describe\s+pod\s+([a-z0-9](?:[-a-z0-9]*[a-z0-9])?)(?:\s+-n\s+([a-z0-9](?:[-a-z0-9]*[a-z0-9])?))?$/i,
   );
   if (describePodMatch) {
     return {
@@ -270,7 +434,7 @@ export function mapCommandToKubernetesRequest(
     };
   }
   const getDeploymentMatch = normalized.match(
-    /^kubectl\s+get\s+deployment\s+([a-z0-9][-a-z0-9]*)(?:\s+-n\s+([a-z0-9][-a-z0-9]*))?$/i,
+    /^kubectl\s+get\s+deployment\s+([a-z0-9](?:[-a-z0-9]*[a-z0-9])?)(?:\s+-n\s+([a-z0-9](?:[-a-z0-9]*[a-z0-9])?))?$/i,
   );
   if (getDeploymentMatch) {
     return {
@@ -280,7 +444,7 @@ export function mapCommandToKubernetesRequest(
     };
   }
   const describeDeploymentMatch = normalized.match(
-    /^kubectl\s+describe\s+deployment\s+([a-z0-9][-a-z0-9]*)(?:\s+-n\s+([a-z0-9][-a-z0-9]*))?$/i,
+    /^kubectl\s+describe\s+deployment\s+([a-z0-9](?:[-a-z0-9]*[a-z0-9])?)(?:\s+-n\s+([a-z0-9](?:[-a-z0-9]*[a-z0-9])?))?$/i,
   );
   if (describeDeploymentMatch) {
     return {
@@ -290,7 +454,7 @@ export function mapCommandToKubernetesRequest(
     };
   }
   const logsMatch = normalized.match(
-    /^kubectl\s+logs\s+([a-z0-9][-a-z0-9]*)(?:\s+-n\s+([a-z0-9][-a-z0-9]*))?(?:\s+-c\s+([a-z0-9][-a-z0-9]*))?(?:\s+--tail\s+(\d+))?$/i,
+    /^kubectl\s+logs\s+([a-z0-9](?:[-a-z0-9]*[a-z0-9])?)(?:\s+-n\s+([a-z0-9](?:[-a-z0-9]*[a-z0-9])?))?(?:\s+-c\s+([a-z0-9](?:[-a-z0-9]*[a-z0-9])?))?(?:\s+--tail\s+(\d+))?$/i,
   );
   if (logsMatch) {
     return {
@@ -302,7 +466,7 @@ export function mapCommandToKubernetesRequest(
     };
   }
   const restartDeploymentMatch = normalized.match(
-    /^kubectl\s+rollout\s+restart\s+deployment\/([a-z0-9][-a-z0-9]*)(?:\s+-n\s+([a-z0-9][-a-z0-9]*))?$/i,
+    /^kubectl\s+rollout\s+restart\s+deployment\/([a-z0-9](?:[-a-z0-9]*[a-z0-9])?)(?:\s+-n\s+([a-z0-9](?:[-a-z0-9]*[a-z0-9])?))?$/i,
   );
   if (restartDeploymentMatch) {
     return {
@@ -312,7 +476,7 @@ export function mapCommandToKubernetesRequest(
     };
   }
   const scaleDeploymentMatch = normalized.match(
-    /^kubectl\s+scale\s+deployment\s+([a-z0-9][-a-z0-9]*)\s+--replicas=(\d+)(?:\s+-n\s+([a-z0-9][-a-z0-9]*))?$/i,
+    /^kubectl\s+scale\s+deployment\s+([a-z0-9](?:[-a-z0-9]*[a-z0-9])?)\s+--replicas=(\d+)(?:\s+-n\s+([a-z0-9](?:[-a-z0-9]*[a-z0-9])?))?$/i,
   );
   if (scaleDeploymentMatch) {
     return {

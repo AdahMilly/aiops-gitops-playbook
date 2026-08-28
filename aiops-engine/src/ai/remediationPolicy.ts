@@ -1,13 +1,11 @@
-import type {
-  AIRemediationAction,
-  RemediationRisk,
-} from "./aiRemediationPlanner";
+import type { AIRemediationAction } from "./aiRemediationPlanner";
 
 export type RemediationPolicyDecision =
   | "SAFE"
   | "DRY_RUN_ONLY"
   | "REQUIRES_APPROVAL"
   | "BLOCKED";
+
 export interface RemediationPolicyResult {
   actionId: string;
   decision: RemediationPolicyDecision;
@@ -64,7 +62,7 @@ export function evaluateRemediationAction(
 ): RemediationPolicyResult {
   const policy = mergePolicy(config);
   const evaluatedAt = new Date().toISOString();
-  if (!action.command) {
+  if (!action.command?.trim()) {
     return {
       actionId: action.id,
       decision: "DRY_RUN_ONLY",
@@ -151,7 +149,7 @@ export function evaluateRemediationAction(
     actionId: action.id,
     decision: "BLOCKED",
     allowed: false,
-    requiresApproval: true,
+    requiresApproval: false,
     reason:
       "Command is not present in the remediation allowlist. Unknown commands are blocked by default.",
     command: action.command,

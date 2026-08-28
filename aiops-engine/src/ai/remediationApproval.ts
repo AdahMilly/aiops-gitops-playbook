@@ -12,7 +12,6 @@ import {
 } from "./remediationApprovalStore";
 
 export type ApprovalStatus = "PENDING" | "APPROVED" | "REJECTED" | "EXPIRED";
-
 export interface RemediationApprovalRequest {
   id: string;
   actionId: string;
@@ -30,10 +29,28 @@ export interface RemediationApprovalRequest {
 function createApprovalId(actionId: string): string {
   return `approval-${actionId}-${Date.now()}`;
 }
+function createActionFromApproval(
+  request: RemediationApprovalRequest,
+): AIRemediationAction {
+  return {
+    id: request.actionId,
+    title: request.actionTitle,
+    description: request.description,
+    command: request.command,
+    risk: request.risk,
+    requiresApproval: true,
+    reason: request.policy.reason,
+  };
+}
 export function requestRemediationApproval(
   action: AIRemediationAction,
 ): RemediationApprovalRequest {
   const policy = evaluateRemediationAction(action);
+  if (policy.decision === "BLOCKED") {
+    throw new Error(
+      `Action "${action.title}" cannot be approved because it is blocked by policy: ${policy.reason}`,
+    );
+  }
   if (policy.decision !== "REQUIRES_APPROVAL") {
     throw new Error(
       `Action "${action.title}" does not require human approval. ` +
@@ -71,6 +88,11 @@ export function getPendingApprovals(): RemediationApprovalRequest[] {
     (request) => request.status === "PENDING",
   );
 }
+export function getApprovedApprovals(): RemediationApprovalRequest[] {
+  return loadApprovalRequests().filter(
+    (request) => request.status === "APPROVED",
+  );
+}
 export function approveRemediation(
   approvalId: string,
   reviewedBy: string,
@@ -84,25 +106,18 @@ export function approveRemediation(
       `Approval request "${approvalId}" is already ${request.status}.`,
     );
   }
-  if (!reviewedBy.trim()) {
+  const reviewer = reviewedBy.trim();
+  if (!reviewer) {
     throw new Error("A reviewer identity is required to approve an action.");
   }
-  const action: AIRemediationAction = {
-    id: request.actionId,
-    title: request.actionTitle,
-    description: request.description,
-    command: request.command,
-    risk: request.risk,
-    requiresApproval: true,
-    reason: request.policy.reason,
-  };
+  const action = createActionFromApproval(request);
   const currentPolicy = evaluateRemediationAction(action);
   if (currentPolicy.decision === "BLOCKED") {
     throw new Error(
       `Approval denied by current remediation policy: ${currentPolicy.reason}`,
     );
   }
-  if (currentPolicy.decision === "SAFE") {
+  if (currentPolicy.decision !== "REQUIRES_APPROVAL") {
     throw new Error(
       "This action no longer requires approval under the current remediation policy.",
     );
@@ -111,7 +126,7 @@ export function approveRemediation(
     ...request,
     status: "APPROVED",
     reviewedAt: new Date().toISOString(),
-    reviewedBy: reviewedBy.trim(),
+    reviewedBy: reviewer,
     policy: currentPolicy,
   };
   saveApprovalRequest(updatedRequest);
@@ -131,28 +146,32 @@ export function rejectRemediation(
       `Approval request "${approvalId}" is already ${request.status}.`,
     );
   }
-  if (!reviewedBy.trim()) {
+  const reviewer = reviewedBy.trim();
+  const rejectionReason = reason.trim();
+  if (!reviewer) {
     throw new Error("A reviewer identity is required to reject an action.");
   }
-  if (!reason.trim()) {
+  if (!rejectionReason) {
     throw new Error("A rejection reason is required.");
   }
   const updatedRequest: RemediationApprovalRequest = {
     ...request,
     status: "REJECTED",
     reviewedAt: new Date().toISOString(),
-    reviewedBy: reviewedBy.trim(),
-    rejectionReason: reason.trim(),
+    reviewedBy: reviewer,
+    rejectionReason,
   };
   saveApprovalRequest(updatedRequest);
   return updatedRequest;
 }
 export function isApprovedForExecution(approvalId: string): boolean {
   const request = findApprovalRequest(approvalId);
-  if (!request) {
+  if (!request || request.status !== "APPROVED") {
     return false;
   }
-  return request.status === "APPROVED";
+  const action = createActionFromApproval(request);
+  const currentPolicy = evaluateRemediationAction(action);
+  return currentPolicy.decision === "REQUIRES_APPROVAL";
 }
 export function findApprovedApprovalForAction(
   actionId: string,
