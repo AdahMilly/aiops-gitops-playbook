@@ -11,13 +11,13 @@ export interface AIRemediationAction {
   reason: string;
 }
 export interface AIRemediationPlan {
-  available: boolean;
-  priority: "Low" | "Medium" | "High" | "Critical";
-  problem: string;
-  diagnosis: string;
+  available?: boolean;
+  priority?: "Low" | "Medium" | "High" | "Critical";
+  problem?: string;
+  diagnosis?: string;
   actions: AIRemediationAction[];
-  blockedActions: string[];
-  generatedAt: string;
+  blockedActions?: string[];
+  generatedAt?: string;
 }
 function createActionId(title: string, index: number): string {
   const normalized = title

@@ -1,6 +1,8 @@
 import { execFile } from "child_process";
 import { promisify } from "util";
+
 const execFileAsync = promisify(execFile);
+
 export type KubernetesRemediationOperation =
   | "get-nodes"
   | "describe-nodes"
@@ -25,6 +27,7 @@ export interface KubernetesRemediationRequest {
 export interface KubernetesRemediationExecutionRequest extends KubernetesRemediationRequest {
   mode?: RemediationExecutionMode;
 }
+
 export interface KubernetesRemediationResult {
   success: boolean;
   operation: KubernetesRemediationOperation;
@@ -51,6 +54,7 @@ const COMMAND_TIMEOUT_MS = 30_000;
 const MAX_OUTPUT_SIZE = 1024 * 1024;
 const SAFE_NAME_PATTERN = /^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$/;
 const MAX_NAME_LENGTH = 253;
+
 function validateKubernetesName(value: string, fieldName: string): void {
   if (!value) {
     throw new Error(`${fieldName} is required.`);
@@ -203,6 +207,7 @@ function buildKubectlCommand(args: string[]): string {
       if (/^[a-zA-Z0-9._=/:+-]+$/.test(value)) {
         return value;
       }
+
       return `"${value.replace(/"/g, '\\"')}"`;
     })
     .join(" ");
@@ -299,7 +304,6 @@ export async function executeKubernetesRemediation(
       mode,
       command,
       output: "",
-      error: undefined,
       executedAt,
       durationMs: Date.now() - startedAt,
       executed: false,
@@ -316,6 +320,7 @@ export async function executeKubernetesRemediation(
       durationMs: Date.now() - startedAt,
       executed: false,
     };
+  }
   if (mode === "execute") {
     if (!readOnly && !isExecutionEnabled()) {
       return {
@@ -404,6 +409,7 @@ export function mapCommandToKubernetesRequest(
     return null;
   }
   const normalized = command.trim().replace(/\s+/g, " ");
+  const namePattern = "([a-z0-9](?:[-a-z0-9]*[a-z0-9])?)";
   if (/^kubectl\s+get\s+nodes$/i.test(normalized)) {
     return {
       operation: "get-nodes",
@@ -415,7 +421,7 @@ export function mapCommandToKubernetesRequest(
     };
   }
   const getPodsMatch = normalized.match(
-    /^kubectl\s+get\s+pods(?:\s+-n\s+([a-z0-9](?:[-a-z0-9]*[a-z0-9])?))?$/i,
+    new RegExp(`^kubectl\\s+get\\s+pods(?:\\s+-n\\s+${namePattern})?$`, "i"),
   );
   if (getPodsMatch) {
     return {
@@ -424,7 +430,10 @@ export function mapCommandToKubernetesRequest(
     };
   }
   const describePodMatch = normalized.match(
-    /^kubectl\s+describe\s+pod\s+([a-z0-9](?:[-a-z0-9]*[a-z0-9])?)(?:\s+-n\s+([a-z0-9](?:[-a-z0-9]*[a-z0-9])?))?$/i,
+    new RegExp(
+      `^kubectl\\s+describe\\s+pod\\s+${namePattern}(?:\\s+-n\\s+${namePattern})?$`,
+      "i",
+    ),
   );
   if (describePodMatch) {
     return {
@@ -434,7 +443,10 @@ export function mapCommandToKubernetesRequest(
     };
   }
   const getDeploymentMatch = normalized.match(
-    /^kubectl\s+get\s+deployment\s+([a-z0-9](?:[-a-z0-9]*[a-z0-9])?)(?:\s+-n\s+([a-z0-9](?:[-a-z0-9]*[a-z0-9])?))?$/i,
+    new RegExp(
+      `^kubectl\\s+get\\s+deployment\\s+${namePattern}(?:\\s+-n\\s+${namePattern})?$`,
+      "i",
+    ),
   );
   if (getDeploymentMatch) {
     return {
@@ -444,7 +456,10 @@ export function mapCommandToKubernetesRequest(
     };
   }
   const describeDeploymentMatch = normalized.match(
-    /^kubectl\s+describe\s+deployment\s+([a-z0-9](?:[-a-z0-9]*[a-z0-9])?)(?:\s+-n\s+([a-z0-9](?:[-a-z0-9]*[a-z0-9])?))?$/i,
+    new RegExp(
+      `^kubectl\\s+describe\\s+deployment\\s+${namePattern}(?:\\s+-n\\s+${namePattern})?$`,
+      "i",
+    ),
   );
   if (describeDeploymentMatch) {
     return {
@@ -454,7 +469,13 @@ export function mapCommandToKubernetesRequest(
     };
   }
   const logsMatch = normalized.match(
-    /^kubectl\s+logs\s+([a-z0-9](?:[-a-z0-9]*[a-z0-9])?)(?:\s+-n\s+([a-z0-9](?:[-a-z0-9]*[a-z0-9])?))?(?:\s+-c\s+([a-z0-9](?:[-a-z0-9]*[a-z0-9])?))?(?:\s+--tail\s+(\d+))?$/i,
+    new RegExp(
+      `^kubectl\\s+logs\\s+${namePattern}` +
+        `(?:\\s+-n\\s+${namePattern})?` +
+        `(?:\\s+-c\\s+${namePattern})?` +
+        `(?:\\s+--tail\\s+(\\d+))?$`,
+      "i",
+    ),
   );
   if (logsMatch) {
     return {
@@ -466,7 +487,10 @@ export function mapCommandToKubernetesRequest(
     };
   }
   const restartDeploymentMatch = normalized.match(
-    /^kubectl\s+rollout\s+restart\s+deployment\/([a-z0-9](?:[-a-z0-9]*[a-z0-9])?)(?:\s+-n\s+([a-z0-9](?:[-a-z0-9]*[a-z0-9])?))?$/i,
+    new RegExp(
+      `^kubectl\\s+rollout\\s+restart\\s+deployment\\/${namePattern}(?:\\s+-n\\s+${namePattern})?$`,
+      "i",
+    ),
   );
   if (restartDeploymentMatch) {
     return {
@@ -476,7 +500,12 @@ export function mapCommandToKubernetesRequest(
     };
   }
   const scaleDeploymentMatch = normalized.match(
-    /^kubectl\s+scale\s+deployment\s+([a-z0-9](?:[-a-z0-9]*[a-z0-9])?)\s+--replicas=(\d+)(?:\s+-n\s+([a-z0-9](?:[-a-z0-9]*[a-z0-9])?))?$/i,
+    new RegExp(
+      `^kubectl\\s+scale\\s+deployment\\s+${namePattern}` +
+        `\\s+--replicas=(\\d+)` +
+        `(?:\\s+-n\\s+${namePattern})?$`,
+      "i",
+    ),
   );
   if (scaleDeploymentMatch) {
     return {
