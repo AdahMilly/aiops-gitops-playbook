@@ -24,6 +24,7 @@ export type {
   RemediationExecutionMode,
   RemediationActionStatus,
 } from "./remediationTypes";
+
 export interface RemediationExecutionOptions {
   approvalIds?: string[];
 }
@@ -91,15 +92,21 @@ export async function executeRemediationPlan(
     completedAt,
     priority: plan.priority,
     results,
-    executedCount: results.filter((result) => result.status === "Executed")
-      .length,
-    validatedCount: results.filter((result) => result.status === "Validated")
-      .length,
-    skippedCount: results.filter((result) => result.status === "Skipped")
-      .length,
-    blockedCount: results.filter((result) => result.status === "Blocked")
-      .length,
-    failedCount: results.filter((result) => result.status === "Failed").length,
+    executedCount: results.filter(
+      (result) => result.status === "Executed",
+    ).length,
+    validatedCount: results.filter(
+      (result) => result.status === "Validated",
+    ).length,
+    skippedCount: results.filter(
+      (result) => result.status === "Skipped",
+    ).length,
+    blockedCount: results.filter(
+      (result) => result.status === "Blocked",
+    ).length,
+    failedCount: results.filter(
+      (result) => result.status === "Failed",
+    ).length,
     awaitingApprovalCount: results.filter(
       (result) => result.status === "AwaitingApproval",
     ).length,
@@ -128,6 +135,7 @@ async function processAction(
     return result;
   }
   const policy = evaluateRemediationAction(action);
+
   if (policy.decision === "BLOCKED") {
     const result: RemediationExecutionResult = {
       actionId: action.id,
@@ -153,7 +161,8 @@ async function processAction(
       mode,
       risk: action.risk,
       requiresApproval: policy.requiresApproval,
-      message: "Action observed only. No infrastructure changes were made.",
+      message:
+        "Action observed only. No infrastructure changes were made.",
       command: action.command,
       executedAt,
     };
@@ -221,7 +230,8 @@ async function processAction(
       mode,
       risk: action.risk,
       requiresApproval: finalPolicy.requiresApproval,
-      message: `Execution blocked by current remediation policy: ${finalPolicy.reason}`,
+      message:
+        `Execution blocked by current remediation policy: ${finalPolicy.reason}`,
       command: action.command,
       executedAt,
     };
@@ -231,13 +241,13 @@ async function processAction(
   let approvalId: string | undefined;
   if (finalPolicy.decision === "REQUIRES_APPROVAL") {
     const suppliedApprovalIds = options.approvalIds ?? [];
-    const existingApproval = listApprovalRequests().find(
+    const approvedRequest = listApprovalRequests().find(
       (approval) =>
         approval.actionId === action.id &&
         approval.status === "APPROVED" &&
         suppliedApprovalIds.includes(approval.id),
     );
-    if (!existingApproval) {
+    if (!approvedRequest) {
       const approval = requestRemediationApproval(action);
       approvalId = approval.id;
       const result: RemediationExecutionResult = {
@@ -257,7 +267,7 @@ async function processAction(
       writeAudit(action, finalPolicy.decision, result);
       return result;
     }
-    approvalId = existingApproval.id;
+    approvalId = approvedRequest.id;
     if (!isApprovedForExecution(approvalId)) {
       const result: RemediationExecutionResult = {
         actionId: action.id,
@@ -267,7 +277,8 @@ async function processAction(
         mode,
         risk: action.risk,
         requiresApproval: true,
-        message: "The supplied approval is not currently valid for execution.",
+        message:
+          "The supplied approval is not currently valid for execution.",
         command: action.command,
         approvalId,
         executedAt,
@@ -290,7 +301,8 @@ async function processAction(
         mode,
         risk: action.risk,
         requiresApproval: finalPolicy.requiresApproval,
-        message: execution.error || "Kubernetes remediation failed.",
+        message:
+          execution.error || "Kubernetes remediation failed.",
         command: action.command,
         approvalId,
         executedAt,
@@ -317,7 +329,8 @@ async function processAction(
     writeAudit(action, finalPolicy.decision, result);
     return result;
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message =
+      error instanceof Error ? error.message : String(error);
     const result: RemediationExecutionResult = {
       actionId: action.id,
       title: action.title,
@@ -338,7 +351,11 @@ async function processAction(
 }
 function writeAudit(
   action: AIRemediationAction,
-  policyDecision: "SAFE" | "DRY_RUN_ONLY" | "REQUIRES_APPROVAL" | "BLOCKED",
+  policyDecision:
+    | "SAFE"
+    | "DRY_RUN_ONLY"
+    | "REQUIRES_APPROVAL"
+    | "BLOCKED",
   result: RemediationExecutionResult,
 ): void {
   const auditEntry = createRemediationAuditEntry(action, {

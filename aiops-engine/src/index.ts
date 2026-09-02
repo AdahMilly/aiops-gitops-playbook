@@ -12,60 +12,52 @@ import {
   type RemediationExecutionReport,
 } from "./ai/remediationExecutor";
 import { getPendingApprovals } from "./ai/remediationApproval";
+import { logger } from "./utils/logger";
 
 async function main() {
-  console.log("\n=====================================");
-  console.log("      AIOps Incident Detection");
-  console.log("=====================================\n");
-  console.log("Collecting telemetry...\n");
+  logger.section("AIOps Incident Detection");
+  logger.info("Collecting telemetry...");
   const telemetry = await collectTelemetry();
-  console.log("Telemetry collected successfully.\n");
+  logger.success("Telemetry collected successfully.");
   const health = analyze(telemetry);
-  console.log("Health analysis complete.\n");
+  logger.success("Health analysis complete.");
   const previousIncidents = loadIncidentState();
-  console.log(`Loaded ${previousIncidents.length} previous incidents.\n`);
+  logger.info(`Loaded ${previousIncidents.length} previous incidents.`);
   const report = generateIncidentReport({
     health,
     telemetry,
     previousIncidents,
   });
   saveIncidentState(report.incidentLifecycle.incidents);
-  console.log(
-    `Incident state saved: ${report.incidentLifecycle.activeIncidents.length} active incidents.\n`,
+  logger.success(
+    `Incident state saved: ${report.incidentLifecycle.activeIncidents.length} active incidents.`,
   );
-  console.log("=====================================");
-  console.log("INCIDENT SUMMARY");
-  console.log("=====================================");
-
-  console.table({
+  logger.section("Incident Summary");
+  logger.table({
     Score: report.summary.score,
     Level: report.summary.level,
     Healthy: report.summary.healthy,
   });
-  console.log("\n=====================================");
-  console.log("ROOT CAUSE");
-  console.log("=====================================");
+  logger.section("Root Cause");
   if (report.rootCause) {
-    console.table([
+    logger.table([
       {
         Category: report.rootCause.category,
         Subcategory: report.rootCause.subcategory,
         Confidence: `${report.rootCause.confidence}%`,
       },
     ]);
-    console.log("\nEvidence:");
+    logger.subsection("Evidence");
     report.rootCause.evidence.forEach((evidence) => {
-      console.log(` • ${evidence}`);
+      logger.item(evidence);
     });
   } else {
-    console.log("No root cause identified.");
+    logger.info("No root cause identified.");
   }
-  console.log("\n=====================================");
-  console.log("INCIDENT GROUPS");
-  console.log("=====================================");
+  logger.section("Incident Groups");
   report.incidentGroups.forEach((group, index) => {
-    console.log(`\nIncident ${index + 1}`);
-    console.table([
+    logger.subsection(`Incident ${index + 1}`);
+    logger.table([
       {
         Title: group.title,
         Category: group.category,
@@ -74,26 +66,24 @@ async function main() {
         Pods: group.affectedPods.length,
       },
     ]);
-    console.log("\nFindings:");
+    logger.subsection("Findings");
     group.findings.forEach((finding) => {
-      console.log(` • ${finding.issue} (${finding.severity})`);
+      logger.item(`${finding.issue} (${finding.severity})`);
     });
-    console.log("\nEvidence:");
+    logger.subsection("Evidence");
     group.evidence.forEach((evidence) => {
-      console.log(` • ${evidence}`);
+      logger.item(evidence);
     });
     if (group.affectedPods.length > 0) {
-      console.log("\nAffected Pods:");
+      logger.subsection("Affected Pods");
+
       group.affectedPods.forEach((pod) => {
-        console.log(` • ${pod}`);
+        logger.item(pod);
       });
     }
-    console.log("");
   });
-  console.log("=====================================");
-  console.log("CORRELATIONS");
-  console.log("=====================================");
-  console.table(
+  logger.section("Correlations");
+  logger.table(
     report.correlations.map((finding) => ({
       Severity: finding.severity,
       Issue: finding.issue,
@@ -102,10 +92,8 @@ async function main() {
       Evidence: finding.evidence.join(", "),
     })),
   );
-  console.log("\n=====================================");
-  console.log("PREDICTIONS");
-  console.log("=====================================");
-  console.table(
+  logger.section("Predictions");
+  logger.table(
     report.predictions.map((prediction) => ({
       Metric: prediction.metric,
       Risk: prediction.risk,
@@ -114,22 +102,18 @@ async function main() {
       Message: prediction.message,
     })),
   );
-  console.log("\n=====================================");
-  console.log("RECOMMENDATIONS");
-  console.log("=====================================");
+  logger.section("Recommendations");
   report.recommendations.forEach((recommendation) => {
-    console.log(`\n[${recommendation.priority}] ${recommendation.issue}`);
+    logger.subsection(`[${recommendation.priority}] ${recommendation.issue}`);
     recommendation.actions.forEach((action, index) => {
-      console.log(`  ${index + 1}. ${action}`);
+      logger.item(`${index + 1}. ${action}`);
     });
     if (recommendation.automation) {
-      console.log(`\n  Automation:\n  ${recommendation.automation}`);
+      logger.step(`Automation: ${recommendation.automation}`);
     }
   });
-  console.log("\n=====================================");
-  console.log("INCIDENT TIMELINE");
-  console.log("=====================================");
-  console.table(
+  logger.section("Incident Timeline");
+  logger.table(
     report.timeline.map((entry) => ({
       Time: entry.timestamp,
       Source: entry.source,
@@ -137,10 +121,8 @@ async function main() {
       Title: entry.title,
     })),
   );
-  console.log("\n=====================================");
-  console.log("INCIDENT LIFECYCLE");
-  console.log("=====================================");
-  console.table(
+  logger.section("Incident Lifecycle");
+  logger.table(
     report.incidentLifecycle.incidents.map((incident) => ({
       Issue: incident.issue,
       Category: incident.category,
@@ -151,31 +133,27 @@ async function main() {
       LastSeen: incident.lastSeen,
     })),
   );
-  console.log("\n=====================================");
-  console.log("AI INCIDENT INTELLIGENCE");
-  console.log("=====================================\n");
-  console.log("Passing incident report to AI orchestrator...\n");
+  logger.section("AI Incident Intelligence");
+  logger.info("Passing incident report to AI orchestrator...");
   let aiResult;
   try {
     aiResult = await orchestrateAILayer(report);
     if (aiResult.available) {
-      console.log("AI analysis completed successfully.");
-      console.log(`Provider: ${aiResult.provider}`);
+      logger.success("AI analysis completed successfully.");
+      logger.info(`Provider: ${aiResult.provider}`);
       if (aiResult.error) {
-        console.log(`AI fallback reason: ${aiResult.error}`);
+        logger.warn(`AI fallback reason: ${aiResult.error}`);
       }
-      console.log("");
     } else {
-      console.log(
-        "AI analysis unavailable. Continuing with deterministic intelligence.\n",
+      logger.warn(
+        "AI analysis unavailable. Continuing with deterministic intelligence.",
       );
       if (aiResult.error) {
-        console.log(`AI reason: ${aiResult.error}\n`);
+        logger.warn(`AI reason: ${aiResult.error}`);
       }
     }
   } catch (error) {
-    console.error("\nAI orchestration failed.");
-    console.error(error);
+    logger.error("AI orchestration failed.", error);
     aiResult = {
       available: false,
       provider: "unavailable",
@@ -183,64 +161,55 @@ async function main() {
       analysis: null,
     };
   }
-  console.log("=====================================");
-  console.log("AI REMEDIATION PLANNER");
-  console.log("=====================================\n");
+  logger.section("AI Remediation Planner");
   const remediationPlan = aiResult.analysis
     ? buildAIRemediationPlan(aiResult.analysis)
     : null;
   let remediationExecution: RemediationExecutionReport | null = null;
   if (remediationPlan) {
-    console.log("\n=====================================");
-    console.log("AI REMEDIATION PLAN");
-    console.log("=====================================\n");
-    console.log(`Priority: ${remediationPlan.priority}`);
-    console.log(`Problem: ${remediationPlan.problem}`);
-    console.log(`Diagnosis: ${remediationPlan.diagnosis}\n`);
+    logger.section("AI Remediation Plan");
+    logger.info(`Priority: ${remediationPlan.priority}`);
+    logger.info(`Problem: ${remediationPlan.problem}`);
+    logger.info(`Diagnosis: ${remediationPlan.diagnosis}`);
     if (remediationPlan.actions.length === 0) {
-      console.log("No remediation actions were generated.\n");
+      logger.warn("No remediation actions were generated.");
     }
     remediationPlan.actions.forEach((action, index) => {
-      console.log(`Action ${index + 1}`);
-      console.log(`  Title: ${action.title}`);
-      console.log(`  Risk: ${action.risk}`);
-      console.log(`  Requires Approval: ${action.requiresApproval}`);
+      logger.subsection(`Action ${index + 1}`);
+      logger.info(`Title: ${action.title}`);
+      logger.info(`Risk: ${action.risk}`);
+      logger.info(`Requires Approval: ${action.requiresApproval}`);
       if (action.command) {
-        console.log(`  Command: ${action.command}`);
+        logger.info(`Command: ${action.command}`);
       }
-      console.log(`  Reason: ${action.reason}`);
-      console.log("");
+      logger.info(`Reason: ${action.reason}`);
     });
-    if (remediationPlan.blockedActions.length > 0) {
-      console.log("=====================================");
-      console.log("BLOCKED REMEDIATION ACTIONS");
-      console.log("=====================================\n");
+    if (remediationPlan.blockedActions?.length) {
+      logger.section("Blocked Remediation Actions");
       remediationPlan.blockedActions.forEach((action) => {
-        console.log(` • ${action}`);
+        logger.item(action);
       });
-      console.log("");
     }
-    console.log("=====================================");
-    console.log("REMEDIATION EXECUTION");
-    console.log("=====================================\n");
-    console.log("Running remediation planner in OBSERVE mode.");
-    console.log("No infrastructure changes will be performed.\n");
+    logger.section("Remediation Execution");
+    logger.info("Running remediation planner in OBSERVE mode.");
+    logger.info("No infrastructure changes will be performed.");
     try {
       remediationExecution = await executeRemediationPlan(
         remediationPlan,
         "observe",
       );
-      console.log(`Executed: ${remediationExecution.executedCount}`);
-      console.log(`Validated: ${remediationExecution.validatedCount}`);
-      console.log(`Skipped: ${remediationExecution.skippedCount}`);
-      console.log(`Blocked: ${remediationExecution.blockedCount}`);
-      console.log(`Failed: ${remediationExecution.failedCount}`);
-      console.log(
-        `Awaiting Approval: ${remediationExecution.awaitingApprovalCount}`,
-      );
-      console.log("");
+      logger.success("Remediation plan execution completed.");
+      logger.table({
+        Executed: remediationExecution.executedCount,
+        Validated: remediationExecution.validatedCount,
+        Skipped: remediationExecution.skippedCount,
+        Blocked: remediationExecution.blockedCount,
+        Failed: remediationExecution.failedCount,
+        "Awaiting Approval": remediationExecution.awaitingApprovalCount,
+      });
       if (remediationExecution.results.length > 0) {
-        console.table(
+        logger.subsection("Execution Results");
+        logger.table(
           remediationExecution.results.map((result) => ({
             Action: result.title,
             Risk: result.risk,
@@ -252,18 +221,15 @@ async function main() {
         );
       }
     } catch (error) {
-      console.error("\nRemediation execution layer failed.");
-      console.error(error);
+      logger.error("Remediation execution layer failed.", error);
     }
-    console.log("\n=====================================");
-    console.log("REMEDIATION APPROVAL STATUS");
-    console.log("=====================================\n");
+    logger.section("Remediation Approval Status");
     try {
       const pendingApprovals = getPendingApprovals();
       if (pendingApprovals.length === 0) {
-        console.log("No pending remediation approvals.");
+        logger.success("No pending remediation approvals.");
       } else {
-        console.table(
+        logger.table(
           pendingApprovals.map((approval) => ({
             ApprovalId: approval.id,
             Action: approval.actionTitle,
@@ -274,32 +240,24 @@ async function main() {
         );
       }
     } catch (error) {
-      console.error("Failed to load remediation approvals.");
-      console.error(error);
+      logger.error("Failed to load remediation approvals.", error);
     }
   } else {
-    console.log(
+    logger.warn(
       "No AI remediation plan was generated because AI analysis is unavailable.",
     );
   }
-  console.log("\n=====================================");
-  console.log("FULL INCIDENT REPORT");
-  console.log("=====================================\n");
+  logger.section("Full Incident Report");
   const finalReport = {
     ...report,
     aiAnalysis: aiResult,
     aiRemediation: remediationPlan,
     remediationExecution,
   };
-  console.dir(finalReport, {
-    depth: null,
-  });
-  console.log("\n=====================================");
-  console.log("PIPELINE COMPLETED SUCCESSFULLY");
-  console.log("=====================================\n");
+  logger.data(finalReport);
+  logger.section("Pipeline Completed Successfully");
 }
 main().catch((error) => {
-  console.error("\nPipeline failed.\n");
-  console.error(error);
+  logger.error("Pipeline failed.", error);
   process.exit(1);
 });

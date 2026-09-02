@@ -4,6 +4,8 @@ import type {
   AIRemediationPlan,
 } from "./aiRemediationPlanner";
 import type { RemediationExecutionMode } from "./remediationTypes";
+import { logger } from "../utils/logger";
+
 interface RunnerOptions {
   mode: RemediationExecutionMode;
   command: string;
@@ -12,7 +14,6 @@ interface RunnerOptions {
   risk: AIRemediationAction["risk"];
   requiresApproval: boolean;
 }
-
 function parseArgs(): RunnerOptions {
   const args = process.argv.slice(2);
   let mode: RemediationExecutionMode = "observe";
@@ -22,7 +23,6 @@ function parseArgs(): RunnerOptions {
     "Retrieve the current Kubernetes pods for infrastructure inspection.";
   let risk: AIRemediationAction["risk"] = "low";
   let requiresApproval = false;
-
   for (const arg of args) {
     if (arg.startsWith("--remediation-mode=")) {
       const value = arg.split("=").slice(1).join("=").trim().toLowerCase();
@@ -44,12 +44,10 @@ function parseArgs(): RunnerOptions {
     }
     if (arg.startsWith("--title=")) {
       title = arg.split("=").slice(1).join("=").trim();
-
       continue;
     }
     if (arg.startsWith("--description=")) {
       description = arg.split("=").slice(1).join("=").trim();
-
       continue;
     }
     if (arg.startsWith("--risk=")) {
@@ -90,13 +88,13 @@ function parseArgs(): RunnerOptions {
 function buildRemediationPlan(options: RunnerOptions): AIRemediationPlan {
   const action: AIRemediationAction = {
     id: "remediation-test",
-    title: "Restart unhealthy deployment",
-    description: "Restart the deployment to recover unhealthy pods.",
+    title: options.title,
+    description: options.description,
     reason:
       "The deployment has unhealthy pods and restarting it may restore service availability.",
-    risk: "medium",
-    requiresApproval: true,
-    command: "kubectl rollout restart deployment/my-app",
+    risk: options.risk,
+    requiresApproval: options.requiresApproval,
+    command: options.command,
   };
   return {
     available: true,
@@ -105,116 +103,122 @@ function buildRemediationPlan(options: RunnerOptions): AIRemediationPlan {
   };
 }
 function printUsage(): void {
-  console.log(`
-AIOps Remediation Runner
-Usage:
-  npm run remediation -- [options]
-Options:
-  --remediation-mode=<mode>
-      observe | dry-run | execute
-      Default:
-      observe
-  --command="<kubectl command>"
-      Kubernetes command to validate/execute.
-      Default:
-      kubectl get pods
-  --title="<title>"
-      Remediation action title.
-  --description="<description>"
-      Remediation action description.
-  --risk=<risk>
-      low | medium | high | critical
-      Default:
-      low
-  --requires-approval
-      Mark the remediation action as requiring approval.
-  --help
-      Show this help message.
-
-Examples:
-  npm run remediation -- --remediation-mode=observe
-  npm run remediation -- --remediation-mode=dry-run
-  npm run remediation -- --remediation-mode=dry-run --command="kubectl get pods -n default"
-  npm run remediation -- --remediation-mode=dry-run --command="kubectl get deployment api -n default"
-  npm run remediation -- --remediation-mode=observe --command="kubectl logs api-pod -n default --tail 100"
-  npm run remediation -- --remediation-mode=dry-run --command="kubectl rollout restart deployment/api -n default"
-  npm run remediation -- --remediation-mode=execute --command="kubectl get pods -n default"
-`);
+  logger.section("AIOps Remediation Runner");
+  logger.subsection("Usage");
+  logger.item("npm run remediation -- [options]");
+  logger.subsection("Options");
+  logger.item("--remediation-mode=<mode>");
+  logger.item("observe | dry-run | execute");
+  logger.item("Default: observe");
+  logger.blank();
+  logger.item('--command="<kubectl command>"');
+  logger.item("Kubernetes command to validate/execute.");
+  logger.item("Default: kubectl get pods");
+  logger.blank();
+  logger.item('--title="<title>"');
+  logger.item("Remediation action title.");
+  logger.blank();
+  logger.item('--description="<description>"');
+  logger.item("Remediation action description.");
+  logger.blank();
+  logger.item("--risk=<risk>");
+  logger.item("low | medium | high | critical");
+  logger.item("Default: low");
+  logger.blank();
+  logger.item("--requires-approval");
+  logger.item("Mark the remediation action as requiring approval.");
+  logger.blank();
+  logger.item("--help");
+  logger.item("Show this help message.");
+  logger.subsection("Examples");
+  logger.item("npm run remediation -- --remediation-mode=observe");
+  logger.item("npm run remediation -- --remediation-mode=dry-run");
+  logger.item(
+    'npm run remediation -- --remediation-mode=dry-run --command="kubectl get pods -n default"',
+  );
+  logger.item(
+    'npm run remediation -- --remediation-mode=dry-run --command="kubectl get deployment api -n default"',
+  );
+  logger.item(
+    'npm run remediation -- --remediation-mode=observe --command="kubectl logs api-pod -n default --tail 100"',
+  );
+  logger.item(
+    'npm run remediation -- --remediation-mode=dry-run --command="kubectl rollout restart deployment/api -n default"',
+  );
+  logger.item(
+    'npm run remediation -- --remediation-mode=execute --command="kubectl get pods -n default"',
+  );
+  logger.blank();
 }
+
 function printReport(
   report: Awaited<ReturnType<typeof executeRemediationPlan>>,
 ): void {
-  console.log("");
-  console.log("========================================");
-  console.log("AIOps Remediation Report");
-  console.log("========================================");
-  console.log(`Available:           ${report.available}`);
-  console.log(`Mode:                ${report.mode}`);
-  console.log(`Priority:            ${report.priority}`);
-  console.log(`Started:             ${report.startedAt}`);
-  console.log(`Completed:           ${report.completedAt}`);
-  console.log("");
-  console.log("Summary");
-  console.log("----------------------------------------");
-  console.log(`Executed:            ${report.executedCount}`);
-  console.log(`Validated:           ${report.validatedCount}`);
-  console.log(`Skipped:             ${report.skippedCount}`);
-  console.log(`Blocked:             ${report.blockedCount}`);
-  console.log(`Failed:              ${report.failedCount}`);
-  console.log(`Awaiting approval:   ${report.awaitingApprovalCount}`);
-  console.log("");
+  logger.section("AIOps Remediation Report");
+  logger.subsection("Execution");
+  logger.item(`Available: ${report.available}`);
+  logger.item(`Mode: ${report.mode}`);
+  logger.item(`Priority: ${report.priority}`);
+  logger.item(`Started: ${report.startedAt}`);
+  logger.item(`Completed: ${report.completedAt}`);
+  logger.subsection("Summary");
+  logger.item(`Executed: ${report.executedCount}`);
+  logger.item(`Validated: ${report.validatedCount}`);
+  logger.item(`Skipped: ${report.skippedCount}`);
+  logger.item(`Blocked: ${report.blockedCount}`);
+  logger.item(`Failed: ${report.failedCount}`);
+  logger.item(`Awaiting approval: ${report.awaitingApprovalCount}`);
   for (const result of report.results) {
-    console.log("========================================");
-    console.log("Action");
-    console.log("========================================");
-    console.log(`ID:                  ${result.actionId}`);
-    console.log(`Title:               ${result.title}`);
-    console.log(`Status:              ${result.status}`);
-    console.log(`Risk:                ${result.risk}`);
-    console.log(`Requires approval:   ${result.requiresApproval}`);
+    logger.subsection("Action");
+    logger.item(`ID: ${result.actionId}`);
+    logger.item(`Title: ${result.title}`);
+    logger.item(`Status: ${result.status}`);
+    logger.item(`Risk: ${result.risk}`);
+    logger.item(`Requires approval: ${result.requiresApproval}`);
     if (result.command) {
-      console.log(`Command:             ${result.command}`);
+      logger.item(`Command: ${result.command}`);
     }
     if (result.approvalId) {
-      console.log(`Approval ID:         ${result.approvalId}`);
+      logger.item(`Approval ID: ${result.approvalId}`);
     }
-    console.log(`Message:             ${result.message}`);
+    logger.item(`Message: ${result.message}`);
     if (result.output) {
-      console.log("");
-      console.log("Output:");
-      console.log("----------------------------------------");
-      console.log(result.output);
+      logger.blank();
+      logger.step("Output:");
+      logger.data(result.output);
     }
     if (result.error) {
-      console.log("");
-      console.log("Error:");
-      console.log("----------------------------------------");
-      console.error(result.error);
+      logger.blank();
+      logger.error(`Error: ${result.error}`);
     }
   }
-  console.log("");
-  console.log("========================================");
+  logger.blank();
 }
 async function main(): Promise<void> {
   try {
     const options = parseArgs();
-    console.log("");
-    console.log("Starting AIOps remediation runner...");
-    console.log(`Mode: ${options.mode}`);
-    console.log(`Command: ${options.command}`);
+    logger.section("Starting AIOps Remediation Runner");
+    logger.item(`Mode: ${options.mode}`);
+    logger.item(`Command: ${options.command}`);
+    logger.item(`Risk: ${options.risk}`);
+    logger.item(`Requires approval: ${options.requiresApproval}`);
     const plan = buildRemediationPlan(options);
     const report = await executeRemediationPlan(plan, options.mode);
     printReport(report);
     const hasFailure = report.failedCount > 0 || report.blockedCount > 0;
     if (hasFailure) {
+      logger.error("Remediation completed with failures or blocked actions.");
       process.exitCode = 1;
+      return;
     }
+    logger.success("Remediation completed successfully.");
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
-    console.error("");
-    console.error("Remediation runner failed:");
-    console.error(message);
-    console.error("");
+    logger.error("Remediation runner failed.");
+    logger.error(message);
+    if (error instanceof Error) {
+      logger.debug("Remediation runner error details", error);
+    }
     process.exitCode = 1;
   }
 }

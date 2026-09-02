@@ -1,21 +1,23 @@
 [
   {
-    "id": "approval-kubectl-rollout-restart-deployment-aiops-engine-4-1787833598768",
-    "actionId": "kubectl-rollout-restart-deployment-aiops-engine-4",
-    "actionTitle": "kubectl rollout restart deployment/aiops-engine",
-    "description": "kubectl rollout restart deployment/aiops-engine",
-    "command": "kubectl rollout restart deployment/aiops-engine",
+    "id": "approval-phase1-approval-test-1788352273631",
+    "actionId": "phase1-approval-test",
+    "actionTitle": "Phase 1 approval test",
+    "description": "Verify that a remediation action cannot execute before human approval.",
+    "command": "kubectl get pods",
     "risk": "high",
-    "status": "PENDING",
-    "requestedAt": "2026-08-27T12:26:38.768Z",
+    "status": "APPROVED",
+    "requestedAt": "2026-09-02T12:31:13.631Z",
     "policy": {
-      "actionId": "kubectl-rollout-restart-deployment-aiops-engine-4",
+      "actionId": "phase1-approval-test",
       "decision": "REQUIRES_APPROVAL",
       "allowed": false,
       "requiresApproval": true,
       "reason": "This remediation action requires explicit human approval before execution.",
-      "command": "kubectl rollout restart deployment/aiops-engine",
-      "evaluatedAt": "2026-08-27T12:26:38.767Z"
-    }
+      "command": "kubectl get pods",
+      "evaluatedAt": "2026-09-02T12:31:13.657Z"
+    },
+    "reviewedAt": "2026-09-02T12:31:13.657Z",
+    "reviewedBy": "phase1-test-reviewer"
   }
 ]
