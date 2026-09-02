@@ -41,7 +41,11 @@ export function predict(data: PredictionInput): Prediction[] {
   const cpu = Number.parseFloat(data.health.cpu);
   const memory = Number.parseFloat(data.health.memory);
 
-  if (data.rootCause?.subcategory === "Node Failure") {
+  const activeNodeFailure =
+    data.rootCause?.subcategory === "Node Failure" &&
+    data.rootCause?.status !== "Historical";
+
+  if (activeNodeFailure) {
     predictions.push({
       metric: "Cluster Availability",
       risk: "Critical",
@@ -52,7 +56,10 @@ export function predict(data: PredictionInput): Prediction[] {
     });
   }
 
-  if (!data.health.applicationHealthy) {
+  const applicationCurrentlyUnhealthy =
+    data.health.applicationHealthy === false;
+
+  if (applicationCurrentlyUnhealthy) {
     predictions.push({
       metric: "Application Availability",
       risk: "Critical",
@@ -63,7 +70,7 @@ export function predict(data: PredictionInput): Prediction[] {
     });
   }
 
-  if (data.trends.cpu.trend === "rising" && cpu > 60) {
+  if (data.trends.cpu.trend.toLowerCase() === "rising" && cpu > 60) {
     predictions.push({
       metric: "CPU",
       risk: "High",
@@ -74,7 +81,7 @@ export function predict(data: PredictionInput): Prediction[] {
     });
   }
 
-  if (data.trends.memory.trend === "rising" && memory > 250) {
+  if (data.trends.memory.trend.toLowerCase() === "rising" && memory > 250) {
     predictions.push({
       metric: "Memory",
       risk: "High",
@@ -85,11 +92,11 @@ export function predict(data: PredictionInput): Prediction[] {
     });
   }
 
-  if (
-    data.correlations.some(
-      (finding) => finding.issue === "Slow application requests",
-    )
-  ) {
+  const hasSlowApplicationRequests = data.correlations.some(
+    (finding) => finding.issue === "Slow application requests",
+  );
+
+  if (hasSlowApplicationRequests) {
     predictions.push({
       metric: "Latency",
       risk: "Medium",
@@ -100,11 +107,11 @@ export function predict(data: PredictionInput): Prediction[] {
     });
   }
 
-  if (
-    data.correlations.some(
-      (finding) => finding.issue === "Tracing unavailable",
-    )
-  ) {
+  const tracingUnavailable = data.correlations.some(
+    (finding) => finding.issue === "Tracing unavailable",
+  );
+
+  if (tracingUnavailable) {
     predictions.push({
       metric: "Observability",
       risk: "Medium",
@@ -121,26 +128,29 @@ export function predict(data: PredictionInput): Prediction[] {
       risk: "Low",
       probability: 0.97,
       horizon: "1 hour",
-      message: "No immediate operational risks predicted.",
+      message:
+        "No immediate operational risks predicted. Historical incidents were detected but no active risk currently requires intervention.",
     });
   }
 
-  return predictions.sort(
-    (a, b) => riskWeight(b.risk) - riskWeight(a.risk),
-  );
+  return predictions.sort((a, b) => riskWeight(b.risk) - riskWeight(a.risk));
 }
 
-function riskWeight(
-  risk: Prediction["risk"],
-): number {
+function riskWeight(risk: Prediction["risk"]): number {
   switch (risk) {
     case "Critical":
       return 4;
+
     case "High":
       return 3;
+
     case "Medium":
       return 2;
+
     case "Low":
       return 1;
+
+    default:
+      return 0;
   }
 }

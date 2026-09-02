@@ -5,6 +5,9 @@ export interface RootCauseAnalysis {
   subcategory: string;
   confidence: number;
   evidence: string[];
+
+  status?: "Active" | "Historical";
+  source?: string;
 }
 
 export function findRootCause(
@@ -18,11 +21,26 @@ export function findRootCause(
     (finding) => finding.issue !== "System Healthy",
   );
 
-  if (actionableFindings.length === 0) {
+  if (!actionableFindings.length) {
     return null;
   }
 
-  const nodeFailure = actionableFindings.find(
+  const activeFindings = actionableFindings.filter(
+    (finding) => finding.status === "Active",
+  );
+
+  const historicalFindings = actionableFindings.filter(
+    (finding) => finding.status === "Historical",
+  );
+
+  const candidateFindings =
+    activeFindings.length > 0 ? activeFindings : historicalFindings;
+
+  if (!candidateFindings.length) {
+    return null;
+  }
+
+  const nodeFailure = candidateFindings.find(
     (finding) =>
       finding.issue === "NodeNotReady" ||
       finding.issue === "Cluster node unavailable",
@@ -34,30 +52,33 @@ export function findRootCause(
       subcategory: "Node Failure",
       confidence: 98,
       evidence: nodeFailure.evidence,
+      status: nodeFailure.status,
+      source: nodeFailure.source,
     };
   }
 
-  const unhealthy = actionableFindings.find(
+  const unhealthy = candidateFindings.find(
     (finding) =>
       finding.issue === "Unhealthy" ||
-      finding.issue.toLowerCase().includes("health check") ||
-      finding.issue.toLowerCase().includes("probe") ||
-      finding.issue.toLowerCase().includes("crashloop"),
+      finding.issue === "ReadinessProbeFailure",
   );
 
   if (unhealthy) {
     return {
       category: "Application",
-      subcategory: "Health Check Failure",
+      subcategory:
+        unhealthy.issue === "ReadinessProbeFailure"
+          ? "Readiness Probe Failure"
+          : "Health Check Failure",
       confidence: 95,
       evidence: unhealthy.evidence,
+      status: unhealthy.status,
+      source: unhealthy.source,
     };
   }
 
-  const memory = actionableFindings.find(
-    (finding) =>
-      finding.issue.toLowerCase().includes("memory") ||
-      finding.issue.toLowerCase().includes("oom"),
+  const memory = candidateFindings.find((finding) =>
+    finding.issue.toLowerCase().includes("memory"),
   );
 
   if (memory) {
@@ -66,10 +87,12 @@ export function findRootCause(
       subcategory: "Memory Pressure",
       confidence: 92,
       evidence: memory.evidence,
+      status: memory.status,
+      source: memory.source,
     };
   }
 
-  const cpu = actionableFindings.find((finding) =>
+  const cpu = candidateFindings.find((finding) =>
     finding.issue.toLowerCase().includes("cpu"),
   );
 
@@ -79,10 +102,12 @@ export function findRootCause(
       subcategory: "CPU Saturation",
       confidence: 92,
       evidence: cpu.evidence,
+      status: cpu.status,
+      source: cpu.source,
     };
   }
 
-  const latency = actionableFindings.find((finding) => {
+  const latency = candidateFindings.find((finding) => {
     const issue = finding.issue.toLowerCase();
 
     return issue.includes("slow") || issue.includes("latency");
@@ -94,14 +119,14 @@ export function findRootCause(
       subcategory: "High Latency",
       confidence: 88,
       evidence: latency.evidence,
+      status: latency.status,
+      source: latency.source,
     };
   }
 
-  const tracing = actionableFindings.find((finding) => {
-    const issue = finding.issue.toLowerCase();
-
-    return issue.includes("tracing") || issue.includes("trace");
-  });
+  const tracing = candidateFindings.find((finding) =>
+    finding.issue.toLowerCase().includes("tracing"),
+  );
 
   if (tracing) {
     return {
@@ -109,6 +134,8 @@ export function findRootCause(
       subcategory: "Tracing Missing",
       confidence: 85,
       evidence: tracing.evidence,
+      status: tracing.status,
+      source: tracing.source,
     };
   }
 
@@ -119,7 +146,7 @@ export function findRootCause(
     Low: 1,
   };
 
-  const highest = [...actionableFindings].sort(
+  const highest = [...candidateFindings].sort(
     (a, b) => severityOrder[b.severity] - severityOrder[a.severity],
   )[0];
 
@@ -128,5 +155,7 @@ export function findRootCause(
     subcategory: highest.issue,
     confidence: 70,
     evidence: highest.evidence,
+    status: highest.status,
+    source: highest.source,
   };
 }

@@ -4,7 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "remediation": "tsx src/ai/remediationRunner.ts"
   },
   "keywords": [],
   "author": "",
@@ -14,6 +15,7 @@
     "@types/node": "^26.1.2",
     "axios": "^1.19.0",
     "dotenv": "^17.4.2",
+    "openai": "^7.4.0",
     "tsx": "^4.23.5",
     "typescript": "^7.0.2"
   }

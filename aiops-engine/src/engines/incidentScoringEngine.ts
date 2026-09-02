@@ -2,10 +2,22 @@ import { CorrelationFinding } from "./correlationEngine";
 import { Prediction } from "./recommendationEngine";
 import { RootCauseAnalysis } from "./rootCauseEngine";
 
+export interface HealthFinding {
+  issue: string;
+  severity: "Low" | "Medium" | "High" | "Critical";
+  status?: "Active" | "Historical";
+  source?: string;
+  evidence?: string[];
+  timestamp?: string;
+}
+
 export interface HealthStatus {
   healthy: boolean;
   applicationHealthy?: boolean;
   kubernetesHealthy?: boolean;
+
+  findings?: HealthFinding[];
+  detailedFindings?: HealthFinding[];
 }
 
 export interface TrendSummary {
@@ -36,11 +48,16 @@ export interface IncidentScore {
 
 interface IncidentScoreInput {
   health: HealthStatus;
+
   rootCause: RootCauseAnalysis | null;
+
   correlations: CorrelationFinding[];
+
   predictions: Prediction[];
+
   trends?: TrendSummary;
 }
+
 const SCORE_LIMITS = {
   health: 30,
   rootCause: 25,
@@ -56,19 +73,25 @@ export function scoreIncident(data: IncidentScoreInput): IncidentScore {
 
   const rootCauseScore = calculateRootCauseScore(data.rootCause, reasons);
 
-  const incidentScore = calculateIncidentScore(data.correlations, reasons);
+  const incidentScore = calculateIncidentScore(
+    data.correlations,
+    data.health,
+    reasons,
+  );
 
   const predictionScore = calculatePredictionScore(data.predictions, reasons);
 
   const trendScore = calculateTrendScore(data.trends, reasons);
 
   const score = Math.min(
-    SCORE_LIMITS.health +
-      SCORE_LIMITS.rootCause +
-      SCORE_LIMITS.incidents +
-      SCORE_LIMITS.predictions +
-      SCORE_LIMITS.trends,
-    healthScore + rootCauseScore + incidentScore + predictionScore + trendScore,
+    100,
+    Math.round(
+      healthScore +
+        rootCauseScore +
+        incidentScore +
+        predictionScore +
+        trendScore,
+    ),
   );
 
   const level = getIncidentLevel(score);
@@ -86,6 +109,8 @@ export function scoreIncident(data: IncidentScoreInput): IncidentScore {
     },
   };
 }
+
+
 function calculateHealthScore(
   health: HealthStatus,
   reasons: Set<string>,
@@ -94,16 +119,19 @@ function calculateHealthScore(
 
   if (!health.healthy) {
     score += 10;
+
     reasons.add("Overall health degraded");
   }
 
   if (health.applicationHealthy === false) {
     score += 10;
+
     reasons.add("Application unhealthy");
   }
 
   if (health.kubernetesHealthy === false) {
     score += 10;
+
     reasons.add("Kubernetes unhealthy");
   }
 
@@ -118,15 +146,15 @@ function calculateRootCauseScore(
     return 0;
   }
 
-  reasons.add(rootCause.subcategory);
+  reasons.add(`Root cause: ${rootCause.category}: ${rootCause.subcategory}`);
 
   const categoryWeight = getRootCauseWeight(rootCause.category);
 
   const confidenceMultiplier = clamp(rootCause.confidence / 100, 0, 1);
 
-  return Math.round(
-    Math.min(categoryWeight * confidenceMultiplier, SCORE_LIMITS.rootCause),
-  );
+  const score = categoryWeight * confidenceMultiplier;
+
+  return Math.round(Math.min(score, SCORE_LIMITS.rootCause));
 }
 
 function getRootCauseWeight(category: RootCauseAnalysis["category"]): number {
@@ -153,41 +181,80 @@ function getRootCauseWeight(category: RootCauseAnalysis["category"]): number {
 
 function calculateIncidentScore(
   correlations: CorrelationFinding[],
+  health: HealthStatus,
   reasons: Set<string>,
 ): number {
-  const uniqueIssues = new Map<string, CorrelationFinding["severity"]>();
+  const findings = [
+    ...(health.detailedFindings ?? []),
+    ...(health.findings ?? []),
+  ];
 
-  for (const correlation of correlations) {
-    const currentSeverity = uniqueIssues.get(correlation.issue);
+  const uniqueIssues = new Map<
+    string,
+    {
+      severity: CorrelationFinding["severity"];
+      status?: "Active" | "Historical";
+    }
+  >();
+
+  for (const finding of findings) {
+    const existing = uniqueIssues.get(finding.issue);
 
     if (
-      !currentSeverity ||
-      severityWeight(correlation.severity) > severityWeight(currentSeverity)
+      !existing ||
+      severityWeight(finding.severity) > severityWeight(existing.severity)
     ) {
-      uniqueIssues.set(correlation.issue, correlation.severity);
+      uniqueIssues.set(finding.issue, {
+        severity: finding.severity,
+        status: finding.status,
+      });
+    }
+  }
+
+  for (const correlation of correlations) {
+    if (correlation.issue === "System Healthy") {
+      continue;
+    }
+
+    const existing = uniqueIssues.get(correlation.issue);
+
+    if (
+      !existing ||
+      severityWeight(correlation.severity) > severityWeight(existing.severity)
+    ) {
+      uniqueIssues.set(correlation.issue, {
+        severity: correlation.severity,
+        status: correlation.status,
+      });
     }
   }
 
   const issueScores = Array.from(uniqueIssues.entries())
-    .map(([issue, severity]) => ({
+    .map(([issue, value]) => ({
       issue,
-      severity,
-      score: incidentSeverityScore(severity),
+      severity: value.severity,
+      status: value.status,
+      score: incidentSeverityScore(value.severity),
     }))
     .sort((a, b) => b.score - a.score);
 
   let score = 0;
 
-  for (const incident of issueScores.slice(0, 4)) {
-    score += incident.score;
+  for (const [index, incident] of issueScores.slice(0, 4).entries()) {
+    let incidentScore = incident.score;
 
-    reasons.add(incident.issue);
-
-    const index = issueScores.indexOf(incident);
-
-    if (index > 0) {
-      score -= incident.score * diminishingReturn(index);
+    if (incident.status === "Historical") {
+      incidentScore *= 0.75;
     }
+    incidentScore *= 1 - diminishingReturn(index);
+
+    score += incidentScore;
+
+    reasons.add(
+      `${incident.issue} (${incident.severity}${
+        incident.status ? `, ${incident.status}` : ""
+      })`,
+    );
   }
 
   return Math.round(Math.min(score, SCORE_LIMITS.incidents));
@@ -214,8 +281,30 @@ function incidentSeverityScore(
   }
 }
 
+function severityWeight(severity: CorrelationFinding["severity"]): number {
+  switch (severity) {
+    case "Critical":
+      return 4;
+
+    case "High":
+      return 3;
+
+    case "Medium":
+      return 2;
+
+    case "Low":
+      return 1;
+
+    default:
+      return 0;
+  }
+}
+
 function diminishingReturn(index: number): number {
   switch (index) {
+    case 0:
+      return 0;
+
     case 1:
       return 0.25;
 
@@ -246,7 +335,7 @@ function calculatePredictionScore(
       probability: number;
     } =>
       typeof prediction.metric === "string" &&
-      prediction.metric.length > 0 &&
+      prediction.metric.trim().length > 0 &&
       typeof prediction.probability === "number" &&
       Number.isFinite(prediction.probability),
   );
@@ -254,7 +343,6 @@ function calculatePredictionScore(
   if (!validPredictions.length) {
     return 0;
   }
-
   const highestRiskByMetric = new Map<
     string,
     (typeof validPredictions)[number]
@@ -281,7 +369,7 @@ function calculatePredictionScore(
 
     score += riskScore;
 
-    reasons.add(prediction.message);
+    reasons.add(`Prediction: ${prediction.message}`);
   }
 
   return Math.round(Math.min(score, SCORE_LIMITS.predictions));
@@ -318,11 +406,13 @@ function calculateTrendScore(
 
   if (trends.cpu?.anomaly) {
     score += 5;
+
     reasons.add("CPU anomaly detected");
   }
 
   if (trends.memory?.anomaly) {
     score += 5;
+
     reasons.add("Memory anomaly detected");
   }
 
@@ -343,25 +433,6 @@ function getIncidentLevel(score: number): IncidentScore["level"] {
   }
 
   return "Healthy";
-}
-
-function severityWeight(severity: CorrelationFinding["severity"]): number {
-  switch (severity) {
-    case "Critical":
-      return 4;
-
-    case "High":
-      return 3;
-
-    case "Medium":
-      return 2;
-
-    case "Low":
-      return 1;
-
-    default:
-      return 0;
-  }
 }
 
 function clamp(value: number, min: number, max: number): number {

@@ -1,0 +1,23 @@
+[
+  {
+    "id": "approval-phase1-approval-test-1788352273631",
+    "actionId": "phase1-approval-test",
+    "actionTitle": "Phase 1 approval test",
+    "description": "Verify that a remediation action cannot execute before human approval.",
+    "command": "kubectl get pods",
+    "risk": "high",
+    "status": "APPROVED",
+    "requestedAt": "2026-09-02T12:31:13.631Z",
+    "policy": {
+      "actionId": "phase1-approval-test",
+      "decision": "REQUIRES_APPROVAL",
+      "allowed": false,
+      "requiresApproval": true,
+      "reason": "This remediation action requires explicit human approval before execution.",
+      "command": "kubectl get pods",
+      "evaluatedAt": "2026-09-02T12:31:13.657Z"
+    },
+    "reviewedAt": "2026-09-02T12:31:13.657Z",
+    "reviewedBy": "phase1-test-reviewer"
+  }
+]

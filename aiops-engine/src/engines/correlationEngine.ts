@@ -1,9 +1,14 @@
 import { Incident } from "../models/Incident";
 
+export type FindingStatus = "Active" | "Historical";
+
 export interface CorrelationFinding {
   severity: "Low" | "Medium" | "High" | "Critical";
   issue: string;
   evidence: string[];
+  status: FindingStatus;
+  source: string;
+  timestamp?: string | Date;
 }
 
 interface Trend {
@@ -11,11 +16,21 @@ interface Trend {
   anomaly: boolean;
 }
 
+interface DetailedHealthFinding {
+  issue: string;
+  severity: "Low" | "Medium" | "High" | "Critical";
+  status: FindingStatus;
+  source: string;
+  evidence: string[];
+  timestamp?: string | Date;
+}
+
 interface CorrelationInput {
   health: {
     cpu: string;
     memory: string;
     healthy: boolean;
+    detailedFindings?: DetailedHealthFinding[];
   };
 
   metrics: {
@@ -58,11 +73,27 @@ export function correlate(data: CorrelationInput): CorrelationFinding[] {
     0,
   );
 
+  const detailedFindings = data.health.detailedFindings ?? [];
+
+  for (const finding of detailedFindings) {
+    findings.push({
+      severity: finding.severity,
+      issue: finding.issue,
+      evidence: finding.evidence,
+      status: finding.status,
+      source: finding.source,
+      timestamp: finding.timestamp,
+    });
+  }
+
   if (cpu > 80 && cpuTrend === "rising") {
     findings.push({
       severity: "Critical",
       issue: "CPU Saturation",
       evidence: [`CPU usage ${cpu.toFixed(2)}%`, "CPU trend is rising"],
+      status: "Active",
+      source: "Metrics",
+      timestamp: new Date(),
     });
   }
 
@@ -71,6 +102,9 @@ export function correlate(data: CorrelationInput): CorrelationFinding[] {
       severity: "Critical",
       issue: "Possible Memory Leak",
       evidence: [`Memory ${memory.toFixed(2)} MB`, "Memory trend is rising"],
+      status: "Active",
+      source: "Metrics",
+      timestamp: new Date(),
     });
   }
 
@@ -79,6 +113,9 @@ export function correlate(data: CorrelationInput): CorrelationFinding[] {
       severity: "Medium",
       issue: "CPU Anomaly",
       evidence: ["CPU trend contains abnormal spikes"],
+      status: "Active",
+      source: "Metrics",
+      timestamp: new Date(),
     });
   }
 
@@ -87,6 +124,9 @@ export function correlate(data: CorrelationInput): CorrelationFinding[] {
       severity: "Medium",
       issue: "Memory Anomaly",
       evidence: ["Memory trend contains abnormal spikes"],
+      status: "Active",
+      source: "Metrics",
+      timestamp: new Date(),
     });
   }
 
@@ -95,6 +135,9 @@ export function correlate(data: CorrelationInput): CorrelationFinding[] {
       severity: "Medium",
       issue: "Log Explosion",
       evidence: [`${logCount} recent log entries`],
+      status: "Active",
+      source: "Logs",
+      timestamp: new Date(),
     });
   }
 
@@ -105,6 +148,9 @@ export function correlate(data: CorrelationInput): CorrelationFinding[] {
       severity: "High",
       issue: "Slow Requests",
       evidence: [`${slowTraces.length} traces exceeded 1 second`],
+      status: "Active",
+      source: "Tracing",
+      timestamp: new Date(),
     });
   }
 
@@ -113,6 +159,9 @@ export function correlate(data: CorrelationInput): CorrelationFinding[] {
       severity: "Medium",
       issue: "Tracing unavailable",
       evidence: ["No recent traces returned by Tempo"],
+      status: "Active",
+      source: "Tracing",
+      timestamp: new Date(),
     });
   }
 
@@ -123,7 +172,6 @@ export function correlate(data: CorrelationInput): CorrelationFinding[] {
   for (const incident of activeIncidents) {
     findings.push({
       severity: incident.severity,
-
       issue: incident.title,
 
       evidence:
@@ -132,6 +180,10 @@ export function correlate(data: CorrelationInput): CorrelationFinding[] {
           : incident.symptoms.length > 0
             ? incident.symptoms
             : ["No evidence available"],
+
+      status: "Active",
+      source: "Incident",
+      timestamp: new Date(),
     });
   }
 
@@ -140,7 +192,9 @@ export function correlate(data: CorrelationInput): CorrelationFinding[] {
       index ===
       self.findIndex(
         (finding) =>
-          finding.issue === item.issue && finding.severity === item.severity,
+          finding.issue === item.issue &&
+          finding.severity === item.severity &&
+          finding.status === item.status,
       ),
   );
 
@@ -160,6 +214,9 @@ export function correlate(data: CorrelationInput): CorrelationFinding[] {
         "No abnormal trends",
         "No active incidents",
       ],
+      status: "Active",
+      source: "Health Analysis",
+      timestamp: new Date(),
     });
   }
 
