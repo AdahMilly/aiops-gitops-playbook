@@ -1,4 +1,3 @@
-
 FROM node:22.19.0-alpine AS deps
 
 WORKDIR /app
@@ -6,7 +5,8 @@ WORKDIR /app
 COPY package*.json ./
 
 RUN --mount=type=cache,target=/root/.npm \
-    npm ci --omit=dev
+    npm ci
+
 
 FROM node:22.19.0-alpine AS builder
 
@@ -22,6 +22,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
 RUN npm run build
+
 
 FROM gcr.io/distroless/nodejs22-debian12:nonroot AS runner
 
