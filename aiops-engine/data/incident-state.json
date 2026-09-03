@@ -7,23 +7,23 @@
       "severity": "High",
       "status": "Active",
       "firstSeen": "2026-08-12T13:07:31.000Z",
-      "lastSeen": "2026-09-02T12:25:00.000Z",
-      "occurrences": 25,
+      "lastSeen": "2026-09-03T05:51:05.000Z",
+      "occurrences": 28,
       "evidence": [
         "Node is not ready"
       ],
       "source": "Kubernetes",
-      "durationMs": 1811849000
+      "durationMs": 1874614000
     },
     {
       "id": "application-livenessprobefailure",
       "issue": "LivenessProbeFailure",
       "category": "Application",
       "severity": "High",
-      "status": "Active",
+      "status": "Resolved",
       "firstSeen": "2026-08-12T13:06:01.000Z",
-      "lastSeen": "2026-09-02T12:01:33.000Z",
-      "occurrences": 26,
+      "lastSeen": "2026-09-03T04:19:36.000Z",
+      "occurrences": 28,
       "evidence": [
         "Liveness probe failed: Get \"http://10.244.0.19:3000/\": context deadline exceeded (Client.Timeout exceeded while awaiting headers)",
         "Liveness probe failed: Get \"http://10.244.0.14:3000/\": context deadline exceeded (Client.Timeout exceeded while awaiting headers)",
@@ -31,10 +31,12 @@
         "Liveness probe failed: Get \"http://10.244.0.23:3000/\": context deadline exceeded (Client.Timeout exceeded while awaiting headers)",
         "Liveness probe failed: Get \"http://10.244.0.21:3000/\": context deadline exceeded (Client.Timeout exceeded while awaiting headers)",
         "Liveness probe failed: Get \"http://10.244.0.17:3000/\": context deadline exceeded (Client.Timeout exceeded while awaiting headers)",
-        "Liveness probe failed: Get \"http://10.244.0.6:3000/\": context deadline exceeded (Client.Timeout exceeded while awaiting headers)"
+        "Liveness probe failed: Get \"http://10.244.0.6:3000/\": context deadline exceeded (Client.Timeout exceeded while awaiting headers)",
+        "Liveness probe failed: Get \"http://10.244.0.24:3000/\": context deadline exceeded (Client.Timeout exceeded while awaiting headers)"
       ],
       "source": "Application",
-      "durationMs": 1810532000
+      "durationMs": 1899340211,
+      "resolvedAt": "2026-09-03T12:41:41.211Z"
     },
     {
       "id": "application-readinessprobefailure",
@@ -43,8 +45,8 @@
       "severity": "High",
       "status": "Active",
       "firstSeen": "2026-08-12T12:45:59.000Z",
-      "lastSeen": "2026-09-02T12:04:18.000Z",
-      "occurrences": 25,
+      "lastSeen": "2026-09-03T12:27:13.000Z",
+      "occurrences": 28,
       "evidence": [
         "Readiness probe failed: Get \"http://10.244.0.19:3000/\": context deadline exceeded (Client.Timeout exceeded while awaiting headers)",
         "Readiness probe failed: Get \"http://10.244.0.14:3000/\": context deadline exceeded (Client.Timeout exceeded while awaiting headers)",
@@ -53,11 +55,29 @@
         "Readiness probe failed: Get \"http://10.244.0.18:3000/\": context deadline exceeded (Client.Timeout exceeded while awaiting headers)",
         "Readiness probe failed: Get \"http://10.244.0.23:3000/\": context deadline exceeded (Client.Timeout exceeded while awaiting headers)",
         "Readiness probe failed: Get \"http://10.244.0.21:3000/\": context deadline exceeded (Client.Timeout exceeded while awaiting headers)",
-        "Readiness probe failed: Get \"http://10.244.0.6:3000/\": context deadline exceeded (Client.Timeout exceeded while awaiting headers)"
+        "Readiness probe failed: Get \"http://10.244.0.6:3000/\": context deadline exceeded (Client.Timeout exceeded while awaiting headers)",
+        "Readiness probe failed: Get \"http://10.244.0.17:3000/\": dial tcp 10.244.0.17:3000: connect: connection refused",
+        "Readiness probe failed: Get \"http://10.244.0.10:3000/\": context deadline exceeded (Client.Timeout exceeded while awaiting headers)"
       ],
       "source": "Application",
-      "durationMs": 1811899000
+      "durationMs": 1899674000
+    },
+    {
+      "id": "application-imagepullfailure",
+      "issue": "ImagePullFailure",
+      "category": "Application",
+      "severity": "High",
+      "status": "Resolved",
+      "firstSeen": "2026-09-02T13:34:28.000Z",
+      "lastSeen": "2026-09-02T13:34:28.000Z",
+      "occurrences": 2,
+      "evidence": [
+        "Error: ImagePullBackOff"
+      ],
+      "source": "Application",
+      "durationMs": 83233211,
+      "resolvedAt": "2026-09-03T12:41:41.211Z"
     }
   ],
-  "updatedAt": "2026-09-02T12:32:03.449Z"
+  "updatedAt": "2026-09-03T12:41:41.222Z"
 }
