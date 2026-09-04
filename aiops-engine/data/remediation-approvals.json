@@ -1,13 +1,13 @@
 [
   {
-    "id": "approval-phase1-approval-test-1788439288820",
+    "id": "approval-phase1-approval-test-1788513919319",
     "actionId": "phase1-approval-test",
     "actionTitle": "Phase 1 approval test",
     "description": "Verify that a remediation action cannot execute before human approval.",
     "command": "kubectl get pods",
     "risk": "high",
     "status": "APPROVED",
-    "requestedAt": "2026-09-03T12:41:28.820Z",
+    "requestedAt": "2026-09-04T09:25:19.319Z",
     "policy": {
       "actionId": "phase1-approval-test",
       "decision": "REQUIRES_APPROVAL",
@@ -15,9 +15,47 @@
       "requiresApproval": true,
       "reason": "This remediation action requires explicit human approval before execution.",
       "command": "kubectl get pods",
-      "evaluatedAt": "2026-09-03T12:41:28.855Z"
+      "evaluatedAt": "2026-09-04T09:25:19.361Z"
     },
-    "reviewedAt": "2026-09-03T12:41:28.855Z",
+    "reviewedAt": "2026-09-04T09:25:19.361Z",
     "reviewedBy": "phase1-test-reviewer"
+  },
+  {
+    "id": "approval-phase1-approval-test-1788513919371",
+    "actionId": "phase1-approval-test",
+    "actionTitle": "Phase 1 approval test",
+    "description": "Verify that a remediation action cannot execute before human approval.",
+    "command": "kubectl get pods",
+    "risk": "high",
+    "status": "PENDING",
+    "requestedAt": "2026-09-04T09:25:19.371Z",
+    "policy": {
+      "actionId": "phase1-approval-test",
+      "decision": "REQUIRES_APPROVAL",
+      "allowed": false,
+      "requiresApproval": true,
+      "reason": "This remediation action requires explicit human approval before execution.",
+      "command": "kubectl get pods",
+      "evaluatedAt": "2026-09-04T09:25:19.369Z"
+    }
+  },
+  {
+    "id": "approval-remediation-test-1788513985697",
+    "actionId": "remediation-test",
+    "actionTitle": "Inspect Kubernetes pods",
+    "description": "Retrieve the current Kubernetes pods for infrastructure inspection.",
+    "command": "kubectl rollout restart deployment/aiops-engine",
+    "risk": "high",
+    "status": "PENDING",
+    "requestedAt": "2026-09-04T09:26:25.697Z",
+    "policy": {
+      "actionId": "remediation-test",
+      "decision": "REQUIRES_APPROVAL",
+      "allowed": false,
+      "requiresApproval": true,
+      "reason": "This remediation action requires explicit human approval before execution.",
+      "command": "kubectl rollout restart deployment/aiops-engine",
+      "evaluatedAt": "2026-09-04T09:26:25.693Z"
+    }
   }
 ]

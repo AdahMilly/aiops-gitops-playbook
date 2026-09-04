@@ -16,17 +16,22 @@ import {
   createRemediationAuditEntry,
   saveRemediationAudit,
 } from "./remediationAuditStore";
+import {
+  verifyRemediation,
+  type RemediationVerificationResult,
+} from "./remediationVerifier";
 import type {
   RemediationExecutionMode,
   RemediationActionStatus,
 } from "./remediationTypes";
+
 export type {
   RemediationExecutionMode,
   RemediationActionStatus,
 } from "./remediationTypes";
-
 export interface RemediationExecutionOptions {
   approvalIds?: string[];
+  verify?: boolean;
 }
 export interface RemediationExecutionResult {
   actionId: string;
@@ -42,6 +47,7 @@ export interface RemediationExecutionResult {
   executedAt: string;
   output?: string;
   error?: string;
+  verification?: RemediationVerificationResult;
 }
 export interface RemediationExecutionReport {
   available: boolean;
@@ -56,7 +62,10 @@ export interface RemediationExecutionReport {
   blockedCount: number;
   failedCount: number;
   awaitingApprovalCount: number;
+  verifiedCount: number;
+  verificationFailedCount: number;
 }
+
 export async function executeRemediationPlan(
   plan: AIRemediationPlan,
   mode: RemediationExecutionMode = "observe",
@@ -77,6 +86,8 @@ export async function executeRemediationPlan(
       blockedCount: 0,
       failedCount: 0,
       awaitingApprovalCount: 0,
+      verifiedCount: 0,
+      verificationFailedCount: 0,
     };
   }
   const results: RemediationExecutionResult[] = [];
@@ -110,6 +121,15 @@ export async function executeRemediationPlan(
     awaitingApprovalCount: results.filter(
       (result) => result.status === "AwaitingApproval",
     ).length,
+    verifiedCount: results.filter(
+      (result) =>
+        result.verification?.status === "Verified",
+    ).length,
+    verificationFailedCount: results.filter(
+      (result) =>
+        result.verification?.status === "NotVerified" ||
+        result.verification?.status === "VerificationFailed",
+    ).length,
   };
 }
 async function processAction(
@@ -135,7 +155,6 @@ async function processAction(
     return result;
   }
   const policy = evaluateRemediationAction(action);
-
   if (policy.decision === "BLOCKED") {
     const result: RemediationExecutionResult = {
       actionId: action.id,
@@ -169,25 +188,26 @@ async function processAction(
     writeAudit(action, policy.decision, result);
     return result;
   }
-  const kubernetesRequest = mapCommandToKubernetesRequest(action.command);
-  if (!kubernetesRequest) {
-    const result: RemediationExecutionResult = {
-      actionId: action.id,
-      title: action.title,
-      description: action.description,
-      status: "Blocked",
-      mode,
-      risk: action.risk,
-      requiresApproval: policy.requiresApproval,
-      message:
-        "Command is not supported by the Kubernetes remediation adapter.",
-      command: action.command,
-      executedAt,
-    };
-    writeAudit(action, policy.decision, result);
-    return result;
-  }
   if (mode === "dry-run") {
+    const kubernetesRequest =
+      mapCommandToKubernetesRequest(action.command);
+    if (!kubernetesRequest) {
+      const result: RemediationExecutionResult = {
+        actionId: action.id,
+        title: action.title,
+        description: action.description,
+        status: "Blocked",
+        mode,
+        risk: action.risk,
+        requiresApproval: policy.requiresApproval,
+        message:
+          "Command is not supported by the Kubernetes remediation adapter.",
+        command: action.command,
+        executedAt,
+      };
+      writeAudit(action, policy.decision, result);
+      return result;
+    }
     const result: RemediationExecutionResult = {
       actionId: action.id,
       title: action.title,
@@ -204,22 +224,7 @@ async function processAction(
     writeAudit(action, policy.decision, result);
     return result;
   }
-  if (mode !== "execute") {
-    const result: RemediationExecutionResult = {
-      actionId: action.id,
-      title: action.title,
-      description: action.description,
-      status: "Blocked",
-      mode,
-      risk: action.risk,
-      requiresApproval: policy.requiresApproval,
-      message: `Unsupported remediation execution mode: ${mode}`,
-      command: action.command,
-      executedAt,
-    };
-    writeAudit(action, "BLOCKED", result);
-    return result;
-  }
+
   const finalPolicy = evaluateRemediationAction(action);
   if (finalPolicy.decision === "BLOCKED") {
     const result: RemediationExecutionResult = {
@@ -240,16 +245,15 @@ async function processAction(
   }
   let approvalId: string | undefined;
   if (finalPolicy.decision === "REQUIRES_APPROVAL") {
-    const suppliedApprovalIds = options.approvalIds ?? [];
-    const approvedRequest = listApprovalRequests().find(
-      (approval) =>
-        approval.actionId === action.id &&
-        approval.status === "APPROVED" &&
-        suppliedApprovalIds.includes(approval.id),
+    const approval = requestRemediationApproval(action);
+    approvalId = approval.id;
+    const suppliedApproval = (options.approvalIds ?? []).some(
+      (id) => id === approval.id,
     );
-    if (!approvedRequest) {
-      const approval = requestRemediationApproval(action);
-      approvalId = approval.id;
+    if (
+      !suppliedApproval ||
+      !isApprovedForExecution(approval.id)
+    ) {
       const result: RemediationExecutionResult = {
         actionId: action.id,
         title: action.title,
@@ -267,31 +271,34 @@ async function processAction(
       writeAudit(action, finalPolicy.decision, result);
       return result;
     }
-    approvalId = approvedRequest.id;
-    if (!isApprovedForExecution(approvalId)) {
-      const result: RemediationExecutionResult = {
-        actionId: action.id,
-        title: action.title,
-        description: action.description,
-        status: "AwaitingApproval",
-        mode,
-        risk: action.risk,
-        requiresApproval: true,
-        message:
-          "The supplied approval is not currently valid for execution.",
-        command: action.command,
-        approvalId,
-        executedAt,
-      };
-      writeAudit(action, finalPolicy.decision, result);
-      return result;
-    }
+  }
+
+  const kubernetesRequest =
+    mapCommandToKubernetesRequest(action.command);
+  if (!kubernetesRequest) {
+    const result: RemediationExecutionResult = {
+      actionId: action.id,
+      title: action.title,
+      description: action.description,
+      status: "Blocked",
+      mode,
+      risk: action.risk,
+      requiresApproval: finalPolicy.requiresApproval,
+      message:
+        "Command is not supported by the Kubernetes remediation adapter.",
+      command: action.command,
+      approvalId,
+      executedAt,
+    };
+    writeAudit(action, finalPolicy.decision, result);
+    return result;
   }
   try {
-    const execution = await executeKubernetesRemediation({
-      ...kubernetesRequest,
-      mode: "execute",
-    });
+    const execution =
+      await executeKubernetesRemediation({
+        ...kubernetesRequest,
+        mode: "execute",
+      });
     if (!execution.success) {
       const result: RemediationExecutionResult = {
         actionId: action.id,
@@ -302,12 +309,44 @@ async function processAction(
         risk: action.risk,
         requiresApproval: finalPolicy.requiresApproval,
         message:
-          execution.error || "Kubernetes remediation failed.",
+          execution.error ||
+          "Kubernetes remediation failed.",
         command: action.command,
         approvalId,
         executedAt,
         output: execution.output,
         error: execution.error,
+      };
+      writeAudit(action, finalPolicy.decision, result);
+      return result;
+    }
+    let verification: RemediationVerificationResult | undefined;
+    if (options.verify !== false) {
+      verification = await verifyRemediation(action);
+    }
+    if (
+      verification &&
+      (
+        verification.status === "NotVerified" ||
+        verification.status === "VerificationFailed"
+      )
+    ) {
+      const result: RemediationExecutionResult = {
+        actionId: action.id,
+        title: action.title,
+        description: action.description,
+        status: "Failed",
+        mode,
+        risk: action.risk,
+        requiresApproval: finalPolicy.requiresApproval,
+        message:
+          "Remediation executed, but deterministic verification did not confirm recovery.",
+        command: action.command,
+        approvalId,
+        executedAt,
+        output: execution.output,
+        error: verification.error,
+        verification,
       };
       writeAudit(action, finalPolicy.decision, result);
       return result;
@@ -320,17 +359,23 @@ async function processAction(
       mode,
       risk: action.risk,
       requiresApproval: finalPolicy.requiresApproval,
-      message: "Kubernetes remediation executed successfully.",
+      message:
+        verification?.status === "Verified"
+          ? "Kubernetes remediation executed and deterministic verification confirmed the resulting state."
+          : "Kubernetes remediation executed successfully.",
       command: action.command,
       approvalId,
       executedAt,
       output: execution.output,
+      verification,
     };
     writeAudit(action, finalPolicy.decision, result);
     return result;
   } catch (error: unknown) {
     const message =
-      error instanceof Error ? error.message : String(error);
+      error instanceof Error
+        ? error.message
+        : String(error);
     const result: RemediationExecutionResult = {
       actionId: action.id,
       title: action.title,
@@ -349,6 +394,7 @@ async function processAction(
     return result;
   }
 }
+
 function writeAudit(
   action: AIRemediationAction,
   policyDecision:
