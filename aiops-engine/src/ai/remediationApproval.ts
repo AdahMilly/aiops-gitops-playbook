@@ -12,6 +12,7 @@ import {
 } from "./remediationApprovalStore";
 
 export type ApprovalStatus = "PENDING" | "APPROVED" | "REJECTED" | "EXPIRED";
+
 export interface RemediationApprovalRequest {
   id: string;
   actionId: string;
@@ -26,9 +27,11 @@ export interface RemediationApprovalRequest {
   rejectionReason?: string;
   policy: RemediationPolicyResult;
 }
+
 function createApprovalId(actionId: string): string {
   return `approval-${actionId}-${Date.now()}`;
 }
+
 function createActionFromApproval(
   request: RemediationApprovalRequest,
 ): AIRemediationAction {
@@ -42,6 +45,7 @@ function createActionFromApproval(
     reason: request.policy.reason,
   };
 }
+
 export function requestRemediationApproval(
   action: AIRemediationAction,
 ): RemediationApprovalRequest {
@@ -75,24 +79,29 @@ export function requestRemediationApproval(
   saveApprovalRequest(request);
   return request;
 }
+
 export function getApprovalRequest(
   approvalId: string,
 ): RemediationApprovalRequest | undefined {
   return findApprovalRequest(approvalId);
 }
+
 export function listApprovalRequests(): RemediationApprovalRequest[] {
   return loadApprovalRequests();
 }
+
 export function getPendingApprovals(): RemediationApprovalRequest[] {
   return loadApprovalRequests().filter(
     (request) => request.status === "PENDING",
   );
 }
+
 export function getApprovedApprovals(): RemediationApprovalRequest[] {
   return loadApprovalRequests().filter(
     (request) => request.status === "APPROVED",
   );
 }
+
 export function approveRemediation(
   approvalId: string,
   reviewedBy: string,
@@ -132,6 +141,7 @@ export function approveRemediation(
   saveApprovalRequest(updatedRequest);
   return updatedRequest;
 }
+
 export function rejectRemediation(
   approvalId: string,
   reviewedBy: string,
@@ -164,15 +174,15 @@ export function rejectRemediation(
   saveApprovalRequest(updatedRequest);
   return updatedRequest;
 }
+
 export function isApprovedForExecution(approvalId: string): boolean {
   const request = findApprovalRequest(approvalId);
-  if (!request || request.status !== "APPROVED") {
+  if (!request) {
     return false;
   }
-  const action = createActionFromApproval(request);
-  const currentPolicy = evaluateRemediationAction(action);
-  return currentPolicy.decision === "REQUIRES_APPROVAL";
+  return request.status === "APPROVED";
 }
+
 export function findApprovedApprovalForAction(
   actionId: string,
 ): RemediationApprovalRequest | undefined {
@@ -180,6 +190,7 @@ export function findApprovedApprovalForAction(
     (request) => request.actionId === actionId && request.status === "APPROVED",
   );
 }
+
 export function expireRemediationApproval(
   approvalId: string,
 ): RemediationApprovalRequest {
@@ -201,6 +212,7 @@ export function expireRemediationApproval(
   saveApprovalRequest(updatedRequest);
   return updatedRequest;
 }
+
 export function clearApprovalRequests(): void {
   clearApprovalStore();
 }

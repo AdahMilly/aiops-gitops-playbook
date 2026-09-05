@@ -5,6 +5,7 @@ import type {
 import { evaluateRemediationAction } from "./remediationPolicy";
 import {
   requestRemediationApproval,
+  findApprovedApprovalForAction,
   isApprovedForExecution,
   listApprovalRequests,
 } from "./remediationApproval";
@@ -90,11 +91,13 @@ export async function executeRemediationPlan(
       verificationFailedCount: 0,
     };
   }
+
   const results: RemediationExecutionResult[] = [];
   for (const action of plan.actions) {
     const result = await processAction(action, mode, options);
     results.push(result);
   }
+
   const completedAt = new Date().toISOString();
   return {
     available: true,
@@ -122,8 +125,7 @@ export async function executeRemediationPlan(
       (result) => result.status === "AwaitingApproval",
     ).length,
     verifiedCount: results.filter(
-      (result) =>
-        result.verification?.status === "Verified",
+      (result) => result.verification?.status === "Verified",
     ).length,
     verificationFailedCount: results.filter(
       (result) =>
@@ -132,6 +134,7 @@ export async function executeRemediationPlan(
     ).length,
   };
 }
+
 async function processAction(
   action: AIRemediationAction,
   mode: RemediationExecutionMode,
@@ -154,6 +157,7 @@ async function processAction(
     writeAudit(action, "BLOCKED", result);
     return result;
   }
+
   const policy = evaluateRemediationAction(action);
   if (policy.decision === "BLOCKED") {
     const result: RemediationExecutionResult = {
@@ -244,16 +248,45 @@ async function processAction(
     return result;
   }
   let approvalId: string | undefined;
+
   if (finalPolicy.decision === "REQUIRES_APPROVAL") {
-    const approval = requestRemediationApproval(action);
-    approvalId = approval.id;
-    const suppliedApproval = (options.approvalIds ?? []).some(
-      (id) => id === approval.id,
+    const suppliedApprovalId = (options.approvalIds ?? []).find(
+      (id) => Boolean(id?.trim()),
     );
-    if (
-      !suppliedApproval ||
-      !isApprovedForExecution(approval.id)
-    ) {
+    if (suppliedApprovalId) {
+      const approvedRequest = findApprovedApprovalForAction(
+        action.id,
+      );
+      if (
+        !approvedRequest ||
+        approvedRequest.id !== suppliedApprovalId ||
+        !isApprovedForExecution(suppliedApprovalId)
+      ) {
+        const result: RemediationExecutionResult = {
+          actionId: action.id,
+          title: action.title,
+          description: action.description,
+          status: "AwaitingApproval",
+          mode,
+          risk: action.risk,
+          requiresApproval: true,
+          message:
+            "The supplied approval ID is missing, invalid, expired, rejected, or does not belong to this remediation action.",
+          command: action.command,
+          approvalId: suppliedApprovalId,
+          executedAt,
+        };
+        writeAudit(
+          action,
+          finalPolicy.decision,
+          result,
+        );
+        return result;
+      }
+      approvalId = approvedRequest.id;
+    } else {
+      const pendingApproval = requestRemediationApproval(action);
+      approvalId = pendingApproval.id;
       const result: RemediationExecutionResult = {
         actionId: action.id,
         title: action.title,
@@ -268,7 +301,11 @@ async function processAction(
         approvalId,
         executedAt,
       };
-      writeAudit(action, finalPolicy.decision, result);
+      writeAudit(
+        action,
+        finalPolicy.decision,
+        result,
+      );
       return result;
     }
   }
@@ -320,7 +357,9 @@ async function processAction(
       writeAudit(action, finalPolicy.decision, result);
       return result;
     }
-    let verification: RemediationVerificationResult | undefined;
+    let verification:
+      | RemediationVerificationResult
+      | undefined;
     if (options.verify !== false) {
       verification = await verifyRemediation(action);
     }
@@ -391,6 +430,7 @@ async function processAction(
       error: message,
     };
     writeAudit(action, finalPolicy.decision, result);
+
     return result;
   }
 }
@@ -415,6 +455,7 @@ function writeAudit(
   });
   saveRemediationAudit(auditEntry);
 }
+
 export function getPendingApprovals() {
   return listApprovalRequests().filter(
     (request) => request.status === "PENDING",
