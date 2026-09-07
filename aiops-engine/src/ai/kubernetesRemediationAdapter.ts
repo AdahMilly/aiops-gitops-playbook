@@ -11,6 +11,7 @@ export type KubernetesRemediationOperation =
   | "get-deployment"
   | "describe-deployment"
   | "get-logs"
+  | "rollout-status"
   | "restart-deployment"
   | "scale-deployment";
 
@@ -47,6 +48,7 @@ const ALLOWED_OPERATIONS: KubernetesRemediationOperation[] = [
   "get-deployment",
   "describe-deployment",
   "get-logs",
+  "rollout-status",
   "restart-deployment",
   "scale-deployment",
 ];
@@ -164,6 +166,22 @@ function buildKubectlArguments(
       }
       return args;
     }
+    case "rollout-status": {
+      if (!request.deployment) {
+        throw new Error("rollout-status requires a deployment name.");
+      }
+      validateKubernetesName(request.deployment, "deployment name");
+      const args = [
+        "rollout",
+        "status",
+        `deployment/${request.deployment}`,
+        "--timeout=10s",
+      ];
+      if (request.namespace) {
+        args.push("-n", request.namespace);
+      }
+      return args;
+    }
     case "restart-deployment": {
       if (!request.deployment) {
         throw new Error("restart-deployment requires a deployment name.");
@@ -234,7 +252,8 @@ function isReadOnlyOperation(
     operation === "describe-pod" ||
     operation === "get-deployment" ||
     operation === "describe-deployment" ||
-    operation === "get-logs"
+    operation === "get-logs" ||
+    operation === "rollout-status"
   );
 }
 function isExecutionEnabled(): boolean {
@@ -484,6 +503,21 @@ export function mapCommandToKubernetesRequest(
       namespace: logsMatch[2],
       container: logsMatch[3],
       tailLines: logsMatch[4] ? Number(logsMatch[4]) : undefined,
+    };
+  }
+  const rolloutStatusMatch = normalized.match(
+    new RegExp(
+      `^kubectl\\s+rollout\\s+status\\s+deployment\\/${namePattern}` +
+        `(?:\\s+-n\\s+${namePattern})?$`,
+      "i",
+    ),
+  );
+
+  if (rolloutStatusMatch) {
+    return {
+      operation: "rollout-status",
+      deployment: rolloutStatusMatch[1],
+      namespace: rolloutStatusMatch[2],
     };
   }
   const restartDeploymentMatch = normalized.match(

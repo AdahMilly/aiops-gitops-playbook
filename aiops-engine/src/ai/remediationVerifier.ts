@@ -1,4 +1,5 @@
 import type { AIRemediationAction } from "./aiRemediationPlanner";
+
 import {
   executeKubernetesRemediation,
   mapCommandToKubernetesRequest,
@@ -10,6 +11,7 @@ export type RemediationVerificationStatus =
   | "NotVerified"
   | "VerificationFailed"
   | "NotApplicable";
+
 export interface RemediationVerificationResult {
   status: RemediationVerificationStatus;
   success: boolean;
@@ -20,6 +22,7 @@ export interface RemediationVerificationResult {
   verifiedAt: string;
   durationMs: number;
 }
+
 interface VerificationCommand {
   request: KubernetesRemediationRequest;
   description: string;
@@ -31,21 +34,25 @@ function getVerificationCommand(
   if (!action.command) {
     return null;
   }
+
   const request = mapCommandToKubernetesRequest(action.command);
+
   if (!request) {
     return null;
   }
+
   switch (request.operation) {
     case "restart-deployment":
       return {
         request: {
-          operation: "get-deployment",
+          operation: "rollout-status",
           deployment: request.deployment,
           namespace: request.namespace,
         },
         description:
-          "Verify that the restarted deployment is available after remediation.",
+          "Verify that the deployment rollout completed successfully after remediation.",
       };
+
     case "scale-deployment":
       return {
         request: {
@@ -54,8 +61,9 @@ function getVerificationCommand(
           namespace: request.namespace,
         },
         description:
-          "Verify that the scaled deployment exists and reports its current replica state.",
+          "Verify that the deployment reports the requested replica count after scaling.",
       };
+
     case "get-nodes":
     case "describe-nodes":
     case "get-pods":
@@ -63,6 +71,7 @@ function getVerificationCommand(
     case "get-deployment":
     case "describe-deployment":
     case "get-logs":
+    case "rollout-status":
       return null;
 
     default:
@@ -72,6 +81,7 @@ function getVerificationCommand(
 
 function outputIndicatesFailure(output: string): boolean {
   const normalized = output.toLowerCase();
+
   const failureIndicators = [
     "error",
     "failed",
@@ -83,29 +93,118 @@ function outputIndicatesFailure(output: string): boolean {
     "unavailable",
     "notready",
   ];
+
   return failureIndicators.some((indicator) => normalized.includes(indicator));
 }
 
-function outputIndicatesDeploymentHealthy(output: string): boolean {
+function extractReplicaState(output: string): {
+  ready: number;
+  desired: number;
+} | null {
   const normalized = output.toLowerCase();
+
+  const patterns = [
+    /\b(\d+)\s*\/\s*(\d+)\b/,
+    /ready:\s*(\d+)/i,
+    /desired:\s*(\d+)/i,
+  ];
+
+  const replicaPattern = normalized.match(patterns[0]);
+
+  if (replicaPattern) {
+    return {
+      ready: Number(replicaPattern[1]),
+      desired: Number(replicaPattern[2]),
+    };
+  }
+
+  return null;
+}
+
+function outputIndicatesDeploymentHealthy(output: string): boolean {
+  if (!output.trim()) {
+    return false;
+  }
+
   if (outputIndicatesFailure(output)) {
     return false;
   }
-  const replicaPattern = /\b(\d+)\/(\d+)\b/;
-  const replicaMatch = normalized.match(replicaPattern);
-  if (replicaMatch) {
-    const ready = Number(replicaMatch[1]);
-    const desired = Number(replicaMatch[2]);
-    return desired > 0 && ready === desired;
+
+  const replicaState = extractReplicaState(output);
+
+  if (replicaState) {
+    return (
+      replicaState.desired > 0 && replicaState.ready === replicaState.desired
+    );
   }
-  return normalized.trim().length > 0;
+
+  return true;
+}
+
+function outputIndicatesRolloutHealthy(output: string): boolean {
+  const normalized = output.toLowerCase();
+
+  if (outputIndicatesFailure(output)) {
+    return false;
+  }
+
+  return (
+    normalized.includes("successfully rolled out") ||
+    normalized.includes("successfully rolled out") ||
+    (normalized.includes("deployment") && normalized.includes("successfully"))
+  );
+}
+
+function outputMatchesRequestedReplicas(
+  output: string,
+  requestedReplicas: number | undefined,
+): boolean {
+  if (requestedReplicas === undefined) {
+    return false;
+  }
+
+  const normalized = output.toLowerCase();
+
+  if (outputIndicatesFailure(output)) {
+    return false;
+  }
+
+  const readyMatch = normalized.match(/ready:\s*(\d+)/);
+  const desiredMatch = normalized.match(/desired:\s*(\d+)/);
+  const replicasMatch = normalized.match(
+    /(\d+)\s+desired\s+replica[s]?,\s*(\d+)\s+updated/,
+  );
+
+  if (readyMatch && desiredMatch) {
+    return (
+      Number(readyMatch[1]) === requestedReplicas &&
+      Number(desiredMatch[1]) === requestedReplicas
+    );
+  }
+
+  if (replicasMatch) {
+    return (
+      Number(replicasMatch[1]) === requestedReplicas &&
+      Number(replicasMatch[2]) === requestedReplicas
+    );
+  }
+
+  const replicaState = extractReplicaState(output);
+
+  if (replicaState) {
+    return (
+      replicaState.ready === requestedReplicas &&
+      replicaState.desired === requestedReplicas
+    );
+  }
+
+  return false;
 }
 
 export async function verifyRemediation(
   action: AIRemediationAction,
 ): Promise<RemediationVerificationResult> {
   const startedAt = Date.now();
-  const verifiedAt = new Date().toISOString();
 
   if (!action.command) {
     return {
@@ -113,31 +212,38 @@ export async function verifyRemediation(
       success: true,
       message:
         "No executable command exists for this action. Verification is not applicable.",
-      verifiedAt,
+      verifiedAt: new Date().toISOString(),
       durationMs: Date.now() - startedAt,
     };
   }
+
   const verification = getVerificationCommand(action);
+
   if (!verification) {
     return {
       status: "NotApplicable",
       success: true,
       message:
         "No deterministic verification procedure is defined for this remediation action.",
-      verifiedAt,
+      verifiedAt: new Date().toISOString(),
       durationMs: Date.now() - startedAt,
     };
   }
+
   const execution = await executeKubernetesRemediation({
     ...verification.request,
     mode: "execute",
   });
+
+  const verifiedAt = new Date().toISOString();
+
   if (!execution.success) {
     return {
       status: "VerificationFailed",
       success: false,
       message:
-        execution.error || "The verification command could not be executed.",
+        execution.error ||
+        "The deterministic verification command could not be executed.",
       command: execution.command,
       output: execution.output,
       error: execution.error,
@@ -145,8 +251,42 @@ export async function verifyRemediation(
       durationMs: Date.now() - startedAt,
     };
   }
+
   const output = execution.output || "";
+
+  if (verification.request.operation === "rollout-status") {
+    if (!outputIndicatesRolloutHealthy(output)) {
+      return {
+        status: "NotVerified",
+        success: false,
+        message:
+          "The deployment rollout completed the command, but deterministic verification did not confirm a successful rollout.",
+        command: execution.command,
+        output,
+        verifiedAt,
+        durationMs: Date.now() - startedAt,
+      };
+    }
+  }
+
   if (verification.request.operation === "get-deployment") {
+    const originalRequest = mapCommandToKubernetesRequest(action.command);
+
+    if (
+      originalRequest?.operation === "scale-deployment" &&
+      !outputMatchesRequestedReplicas(output, originalRequest.replicas)
+    ) {
+      return {
+        status: "NotVerified",
+        success: false,
+        message: `The deployment was queried, but deterministic verification did not confirm ${originalRequest.replicas} requested replicas.`,
+        command: execution.command,
+        output,
+        verifiedAt,
+        durationMs: Date.now() - startedAt,
+      };
+    }
+
     if (!outputIndicatesDeploymentHealthy(output)) {
       return {
         status: "NotVerified",
@@ -160,6 +300,7 @@ export async function verifyRemediation(
       };
     }
   }
+
   return {
     status: "Verified",
     success: true,
