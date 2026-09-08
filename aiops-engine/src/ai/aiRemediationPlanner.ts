@@ -1,6 +1,7 @@
+import type { IncidentReport } from "../engines/generateIncidentReport";
 import type { AIAnalysisResult } from "./aiTypes";
-export type RemediationRisk = "low" | "medium" | "high" | "critical";
 
+export type RemediationRisk = "low" | "medium" | "high" | "critical";
 export interface AIRemediationAction {
   id: string;
   title: string;
@@ -19,6 +20,7 @@ export interface AIRemediationPlan {
   blockedActions?: string[];
   generatedAt?: string;
 }
+
 const ALLOWED_KUBECTL_OPERATIONS = [
   "get",
   "describe",
@@ -26,6 +28,7 @@ const ALLOWED_KUBECTL_OPERATIONS = [
   "rollout restart",
   "scale",
 ] as const;
+
 const BLOCKED_COMMAND_PATTERNS = [
   /\bkubectl\s+delete\b/i,
   /\bkubectl\s+apply\b/i,
@@ -47,196 +50,203 @@ const BLOCKED_COMMAND_PATTERNS = [
   /\bshutdown\b/i,
   /\breboot\b/i,
 ];
+
 function createActionId(title: string, index: number): string {
   const normalized = title
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
-
   return `${normalized || "remediation-action"}-${index + 1}`;
 }
+
 function determinePriority(
-  confidence: number,
+  report: IncidentReport,
 ): "Low" | "Medium" | "High" | "Critical" {
-  if (confidence >= 0.9) {
-    return "Critical";
+  switch (report.summary.level) {
+    case "Critical":
+      return "Critical";
+    case "Major":
+      return "High";
+    case "Warning":
+      return "Medium";
+    case "Healthy":
+    default:
+      return "Low";
   }
-  if (confidence >= 0.75) {
-    return "High";
-  }
-  if (confidence >= 0.5) {
-    return "Medium";
-  }
-  return "Low";
 }
+
 function determineRisk(action: string): RemediationRisk {
   const normalized = action.toLowerCase();
-
   if (
     normalized.includes("delete") ||
-    normalized.includes("destroy") ||
-    normalized.includes("terminate") ||
-    normalized.includes("remove") ||
-    normalized.includes("force")
+    normalized.includes("drain") ||
+    normalized.includes("shutdown") ||
+    normalized.includes("reboot") ||
+    normalized.includes("replace")
   ) {
     return "critical";
   }
   if (
-    normalized.includes("drain") ||
     normalized.includes("restart") ||
-    normalized.includes("rollout") ||
     normalized.includes("scale") ||
+    normalized.includes("patch") ||
     normalized.includes("cordon") ||
     normalized.includes("uncordon")
   ) {
     return "high";
   }
-  if (
-    normalized.includes("patch") ||
-    normalized.includes("update") ||
-    normalized.includes("modify") ||
-    normalized.includes("change") ||
-    normalized.includes("apply") ||
-    normalized.includes("edit") ||
-    normalized.includes("set ")
-  ) {
-    return "medium";
+
+  if (normalized.includes("logs") || normalized.includes("describe")) {
+    return "low";
   }
-  return "low";
+  return "medium";
 }
+
 function requiresApprovalForRisk(risk: RemediationRisk): boolean {
   return risk === "high" || risk === "critical";
 }
+
 function isAllowedKubectlCommand(command: string): boolean {
-  const normalized = command.trim();
-  if (!/^kubectl\s+/i.test(normalized)) {
+  const normalized = command.trim().toLowerCase();
+  if (!normalized.startsWith("kubectl ")) {
     return false;
   }
-  if (BLOCKED_COMMAND_PATTERNS.some((pattern) => pattern.test(normalized))) {
-    return false;
-  }
-  return ALLOWED_KUBECTL_OPERATIONS.some((operation) => {
-    const pattern = new RegExp(
-      `^kubectl\\s+${operation.replace(" ", "\\s+")}(?:\\s|$)`,
-      "i",
-    );
-    return pattern.test(normalized);
-  });
-}
-function extractExecutableCommand(action: string): string | undefined {
-  const kubectlMatch = action.match(
-    /\b(kubectl\s+(?:get|describe|logs|rollout\s+restart|scale)\b[^\n.]*)/i,
+  return ALLOWED_KUBECTL_OPERATIONS.some(
+    (operation) =>
+      normalized === `kubectl ${operation}` ||
+      normalized.startsWith(`kubectl ${operation} `),
   );
-  if (!kubectlMatch?.[1]) {
-    return undefined;
-  }
-  const command = kubectlMatch[1].trim();
-  if (!isAllowedKubectlCommand(command)) {
-    return undefined;
-  }
-  return command;
 }
+
+function extractExecutableCommand(action: string): string | undefined {
+  const match = action.match(
+    /\bkubectl\s+(get|describe|logs|rollout\s+restart|scale)\b[^\n]*/i,
+  );
+  if (!match) {
+    return undefined;
+  }
+
+  return match[0].replace(/\s+/g, " ").trim();
+}
+
 function containsBlockedCommand(action: string): boolean {
   return BLOCKED_COMMAND_PATTERNS.some((pattern) => pattern.test(action));
 }
+
 function containsUnsupportedKubectlCommand(action: string): boolean {
-  if (!/\bkubectl\b/i.test(action)) {
+  const kubectlMatch = action.match(/\bkubectl\s+([a-z-]+)/i);
+  if (!kubectlMatch) {
     return false;
   }
-  if (containsBlockedCommand(action)) {
-    return false;
-  }
-  return !extractExecutableCommand(action);
+  return !isAllowedKubectlCommand(action.trim());
 }
+
+function commandIsGrounded(command: string, report: IncidentReport): boolean {
+  const normalizedCommand = command.replace(/\s+/g, " ").trim();
+
+  const match = normalizedCommand.match(
+    /^kubectl\s+(?:rollout\s+restart|scale)\s+\S+\s+(\S+)/i,
+  );
+  if (!match) {
+    return true;
+  }
+  const target = match[1];
+  const deterministicEvidence = JSON.stringify(report).toLowerCase();
+  return deterministicEvidence.includes(target.toLowerCase());
+}
+
 function createRemediationAction(
   action: string,
   index: number,
   diagnosis: string,
-): AIRemediationAction {
-  const risk = determineRisk(action);
+  report: IncidentReport,
+): AIRemediationAction | null {
   const command = extractExecutableCommand(action);
+  if (!command) {
+    return null;
+  }
+  if (
+    containsBlockedCommand(action) ||
+    containsUnsupportedKubectlCommand(action)
+  ) {
+    return null;
+  }
+  if (!isAllowedKubectlCommand(command)) {
+    return null;
+  }
+  if (!commandIsGrounded(command, report)) {
+    return null;
+  }
+
+  const risk = determineRisk(action);
   return {
     id: createActionId(action, index),
     title: action,
-    description: action,
+    description: `AI-proposed remediation based on deterministic incident evidence: ${diagnosis}`,
     command,
     risk,
     requiresApproval: requiresApprovalForRisk(risk),
-    reason: diagnosis,
+    reason:
+      "Action is derived from AI interpretation but remains subject to deterministic policy and approval controls.",
   };
 }
+
 function identifyBlockedActions(analysis: AIAnalysisResult): string[] {
   const blocked: string[] = [];
-  const nextActions = Array.isArray(analysis.nextActions)
-    ? analysis.nextActions
-    : [];
-  for (const action of nextActions) {
-    if (typeof action !== "string" || !action.trim()) {
+
+  for (const action of analysis.nextActions) {
+    if (
+      containsBlockedCommand(action) ||
+      containsUnsupportedKubectlCommand(action)
+    ) {
+      blocked.push(action);
       continue;
     }
-    const normalized = action.trim();
-    if (containsBlockedCommand(normalized)) {
-      blocked.push(
-        `Blocked potentially destructive or infrastructure-changing command: ${normalized}`,
-      );
-      continue;
-    }
-    if (containsUnsupportedKubectlCommand(normalized)) {
-      blocked.push(
-        `Blocked unsupported Kubernetes command: ${normalized}`,
-      );
+    if (!extractExecutableCommand(action)) {
+      blocked.push(action);
     }
   }
   return blocked;
 }
-function sortActions(
-  actions: AIRemediationAction[],
-): AIRemediationAction[] {
-  const riskWeight: Record<RemediationRisk, number> = {
+
+function sortActions(actions: AIRemediationAction[]): AIRemediationAction[] {
+  const order: Record<RemediationRisk, number> = {
     low: 1,
     medium: 2,
     high: 3,
     critical: 4,
   };
-  return [...actions].sort(
-    (a, b) => riskWeight[a.risk] - riskWeight[b.risk],
-  );
+  return [...actions].sort((a, b) => order[a.risk] - order[b.risk]);
 }
+
 export function buildAIRemediationPlan(
+  report: IncidentReport,
   analysis: AIAnalysisResult,
 ): AIRemediationPlan {
-  const priority = determinePriority(analysis.confidence);
-  const nextActions = Array.isArray(analysis.nextActions)
-    ? analysis.nextActions
-    : [];
-  const blockedActions = identifyBlockedActions(analysis);
-  const executableActions = nextActions
-    .filter(
-      (action): action is string =>
-        typeof action === "string" && action.trim().length > 0,
-    )
-    .filter((action) => !containsBlockedCommand(action))
-    .map((action, index) =>
-      createRemediationAction(
-        action.trim(),
-        index,
-        analysis.diagnosis,
-      ),
-    )
-    .filter((action) => {
-      if (!action.command) {
-        return true;
-      }
+  const priority = determinePriority(report);
 
-      return isAllowedKubectlCommand(action.command);
-    });
-  const actions = sortActions(executableActions);
+  const actions: AIRemediationAction[] = [];
+
+  for (let index = 0; index < analysis.nextActions.length; index += 1) {
+    const action = createRemediationAction(
+      analysis.nextActions[index],
+      index,
+      analysis.diagnosis,
+      report,
+    );
+    if (action) {
+      actions.push(action);
+    }
+  }
+
+  const blockedActions = identifyBlockedActions(analysis);
+
   return {
-    available: true,
+    available: actions.length > 0,
     priority,
     problem: analysis.summary,
     diagnosis: analysis.diagnosis,
-    actions,
+    actions: sortActions(actions),
     blockedActions,
     generatedAt: new Date().toISOString(),
   };

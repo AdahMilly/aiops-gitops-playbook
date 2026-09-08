@@ -7,13 +7,13 @@
       "severity": "High",
       "status": "Active",
       "firstSeen": "2026-08-12T13:07:31.000Z",
-      "lastSeen": "2026-09-07T09:23:20.000Z",
-      "occurrences": 31,
+      "lastSeen": "2026-09-08T08:43:10.000Z",
+      "occurrences": 32,
       "evidence": [
         "Node is not ready"
       ],
       "source": "Kubernetes",
-      "durationMs": 2232949000
+      "durationMs": 2316939000
     },
     {
       "id": "application-livenessprobefailure",
@@ -22,8 +22,8 @@
       "severity": "High",
       "status": "Active",
       "firstSeen": "2026-08-12T13:06:01.000Z",
-      "lastSeen": "2026-09-07T09:16:47.000Z",
-      "occurrences": 31,
+      "lastSeen": "2026-09-08T08:02:04.000Z",
+      "occurrences": 32,
       "evidence": [
         "Liveness probe failed: Get \"http://10.244.0.19:3000/\": context deadline exceeded (Client.Timeout exceeded while awaiting headers)",
         "Liveness probe failed: Get \"http://10.244.0.14:3000/\": context deadline exceeded (Client.Timeout exceeded while awaiting headers)",
@@ -37,7 +37,7 @@
         "Liveness probe failed: Get \"http://10.244.0.20:3000/\": context deadline exceeded (Client.Timeout exceeded while awaiting headers)"
       ],
       "source": "Application",
-      "durationMs": 2232646000
+      "durationMs": 2314563000
     },
     {
       "id": "application-readinessprobefailure",
@@ -46,8 +46,8 @@
       "severity": "High",
       "status": "Active",
       "firstSeen": "2026-08-12T12:45:59.000Z",
-      "lastSeen": "2026-09-07T09:16:00.000Z",
-      "occurrences": 31,
+      "lastSeen": "2026-09-08T07:53:15.000Z",
+      "occurrences": 32,
       "evidence": [
         "Readiness probe failed: Get \"http://10.244.0.19:3000/\": context deadline exceeded (Client.Timeout exceeded while awaiting headers)",
         "Readiness probe failed: Get \"http://10.244.0.14:3000/\": context deadline exceeded (Client.Timeout exceeded while awaiting headers)",
@@ -64,7 +64,7 @@
         "Readiness probe failed: Get \"http://10.244.0.20:3000/\": context deadline exceeded (Client.Timeout exceeded while awaiting headers)"
       ],
       "source": "Application",
-      "durationMs": 2233801000
+      "durationMs": 2315236000
     },
     {
       "id": "application-imagepullfailure",
@@ -83,5 +83,5 @@
       "resolvedAt": "2026-09-03T12:41:41.211Z"
     }
   ],
-  "updatedAt": "2026-09-07T11:13:08.344Z"
+  "updatedAt": "2026-09-08T08:47:46.810Z"
 }

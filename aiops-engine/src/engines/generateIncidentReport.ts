@@ -130,7 +130,7 @@ export function generateIncidentReport(
     generatedAt: new Date().toISOString(),
     summary: {
       score: score.score,
-      level: finalHealthState.level,
+      level: score.level,
       healthy: finalHealthState.healthy,
     },
     health: finalHealth,

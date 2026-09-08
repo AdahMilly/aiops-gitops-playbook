@@ -196,7 +196,7 @@ export async function runAgenticRemediationLoop(
       steps,
       "RESOLVED",
       "No active deterministic incident requires remediation.",
-    )
+    );
     return {
       incidentGeneratedAt: incidentReport.generatedAt,
       state: "RESOLVED",
@@ -256,7 +256,7 @@ export async function runAgenticRemediationLoop(
     };
   }
 
-  const plan = buildAIRemediationPlan(ai.analysis);
+  const plan = buildAIRemediationPlan(incidentReport, ai.analysis);
 
   addStep(
     steps,

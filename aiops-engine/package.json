@@ -1,11 +1,15 @@
 {
   "name": "aiops-engine",
   "version": "1.0.0",
-  "description": "",
+  "description": "AIOps incident detection, diagnosis and agentic remediation engine",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "remediation": "tsx src/ai/remediationRunner.ts"
+    "typecheck": "tsc --noEmit",
+    "build": "tsc",
+    "remediation": "tsx src/ai/remediationRunner.ts",
+    "remediation:observe": "tsx src/ai/remediationRunner.ts --remediation-mode=observe",
+    "remediation:dry-run": "tsx src/ai/remediationRunner.ts --remediation-mode=dry-run"
   },
   "keywords": [],
   "author": "",
