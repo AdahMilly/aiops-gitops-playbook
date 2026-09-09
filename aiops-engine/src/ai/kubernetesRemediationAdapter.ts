@@ -3,6 +3,10 @@ import { promisify } from "util";
 
 const execFileAsync = promisify(execFile);
 
+function getKubectlBinary(): string {
+  return process.env.AIOPS_KUBECTL_BINARY?.trim() || "kubectl";
+}
+
 export type KubernetesRemediationOperation =
   | "get-nodes"
   | "describe-nodes"
@@ -356,7 +360,7 @@ export async function executeKubernetesRemediation(
       };
     }
     try {
-      const { stdout, stderr } = await execFileAsync("kubectl", args, {
+      const { stdout, stderr } = await execFileAsync(getKubectlBinary(), args, {
         windowsHide: true,
         timeout: COMMAND_TIMEOUT_MS,
         maxBuffer: MAX_OUTPUT_SIZE,

@@ -25,7 +25,6 @@ export interface IncidentGroup {
 export function deduplicateIncidents(
   findings: CorrelationFinding[],
 ): IncidentGroup[] {
-
   const actionableFindings = findings.filter(
     (finding) => finding.issue !== "System Healthy",
   );
@@ -34,10 +33,7 @@ export function deduplicateIncidents(
     return [];
   }
 
-  const groups = new Map<
-    IncidentGroup["category"],
-    IncidentGroup
-  >();
+  const groups = new Map<IncidentGroup["category"], IncidentGroup>();
 
   for (const finding of actionableFindings) {
     const category = determineCategory(finding);
@@ -64,10 +60,7 @@ export function deduplicateIncidents(
 
     group.findings.push(finding);
 
-    if (
-      severityWeight(finding.severity) >
-      severityWeight(group.severity)
-    ) {
+    if (severityWeight(finding.severity) > severityWeight(group.severity)) {
       group.severity = finding.severity;
     }
 
@@ -77,14 +70,9 @@ export function deduplicateIncidents(
       }
 
       if (evidence.startsWith("Pod:")) {
-        const pod = evidence
-          .replace("Pod:", "")
-          .trim();
+        const pod = evidence.replace("Pod:", "").trim();
 
-        if (
-          pod &&
-          !group.affectedPods.includes(pod)
-        ) {
+        if (pod && !group.affectedPods.includes(pod)) {
           group.affectedPods.push(pod);
         }
       }
@@ -93,16 +81,12 @@ export function deduplicateIncidents(
 
   for (const group of groups.values()) {
     group.findings.sort(
-      (a, b) =>
-        severityWeight(b.severity) -
-        severityWeight(a.severity),
+      (a, b) => severityWeight(b.severity) - severityWeight(a.severity),
     );
   }
 
   return [...groups.values()].sort(
-    (a, b) =>
-      severityWeight(b.severity) -
-      severityWeight(a.severity),
+    (a, b) => severityWeight(b.severity) - severityWeight(a.severity),
   );
 }
 
@@ -159,9 +143,7 @@ function determineCategory(
   return "Unknown";
 }
 
-function severityWeight(
-  severity: IncidentGroup["severity"],
-): number {
+function severityWeight(severity: IncidentGroup["severity"]): number {
   switch (severity) {
     case "Critical":
       return 4;

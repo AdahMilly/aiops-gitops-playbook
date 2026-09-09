@@ -9,42 +9,29 @@ export function mapIncidents(events: any[] = []): Incident[] {
 
     return {
       id: `${reason}-${event.involvedObject?.name ?? "unknown"}-${index}`,
-
       title: reason,
-
       category: inferCategory(reason),
-
       severity: mapSeverity(event.type),
-
       confidence: status === "Active" ? 90 : 60,
-
       status,
-
       rootCause: reason,
-
       symptoms: [message],
-
       evidence: [
         message,
         event.involvedObject?.kind
           ? `${event.involvedObject.kind}: ${event.involvedObject.name}`
           : "",
       ].filter(Boolean),
-
       recommendations: [],
-
       affectedPods:
         event.involvedObject?.kind === "Pod" && event.involvedObject?.name
           ? [event.involvedObject.name]
           : [],
-
       affectedServices:
         event.involvedObject?.kind === "Service" && event.involvedObject?.name
           ? [event.involvedObject.name]
           : [],
-
       source: ["Kubernetes"],
-
       timestamp: event.timestamp ?? event.lastTimestamp ?? event.firstTimestamp,
     };
   });
@@ -89,7 +76,6 @@ function mapSeverity(type?: string): Incident["severity"] {
   if (type === "Warning") {
     return "High";
   }
-
   return "Low";
 }
 
@@ -97,20 +83,15 @@ function inferCategory(reason?: string): Incident["category"] {
   switch (reason) {
     case "NodeNotReady":
       return "Infrastructure";
-
     case "OOMKilled":
       return "Performance";
-
     case "BackOff":
     case "CrashLoopBackOff":
       return "Application";
-
     case "FailedScheduling":
       return "Infrastructure";
-
     case "Unhealthy":
       return "Application";
-
     default:
       return "Unknown";
   }

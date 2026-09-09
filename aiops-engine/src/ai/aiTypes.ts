@@ -1,10 +1,6 @@
 import type { IncidentReport } from "../engines/generateIncidentReport";
 
-export type AIIncidentSeverity =
-  | "Low"
-  | "Medium"
-  | "High"
-  | "Critical";
+export type AIIncidentSeverity = "Low" | "Medium" | "High" | "Critical";
 
 export type AIIncidentCategory =
   | "Kubernetes"

@@ -23,9 +23,7 @@ export function buildDeterministicAIAnalysis(
       incident.issue === "ReadinessProbeFailure",
   );
   if (hasApplicationFailure) {
-    nextActions.push(
-      "kubectl rollout restart deployment/aiops-engine",
-    );
+    nextActions.push("kubectl rollout restart deployment/aiops-engine");
   }
   const confidence = report.rootCause
     ? Math.min(report.rootCause.confidence / 100, 1)
@@ -35,10 +33,9 @@ export function buildDeterministicAIAnalysis(
       report.rootCause?.evidence?.[0] ??
       "The AIOps pipeline detected one or more active infrastructure incidents.",
     diagnosis,
-    rootCauseExplanation:
-      report.rootCause
-        ? `The strongest deterministic root-cause signal is ${report.rootCause.category} - ${report.rootCause.subcategory}.`
-        : "No single deterministic root cause could be established.",
+    rootCauseExplanation: report.rootCause
+      ? `The strongest deterministic root-cause signal is ${report.rootCause.category} - ${report.rootCause.subcategory}.`
+      : "No single deterministic root cause could be established.",
     impact:
       activeIncidents.length > 0
         ? `${activeIncidents.length} active incident(s) are currently affecting system health.`

@@ -1,9 +1,13 @@
+import { logger } from "../utils/logger";
 import { runAILayer } from "./aiEngine";
+
 import { buildDeterministicAIAnalysis } from "./aiFallback";
+
 import type {
   AIAnalysisInput,
   AIAnalysisResult,
 } from "./aiTypes";
+
 export interface AIOrchestrationResult {
   available: boolean;
   provider: string;
@@ -15,11 +19,14 @@ export interface AIOrchestrationResult {
 function getProvider(): string {
   return process.env.AI_PROVIDER?.trim() || "openai";
 }
+
 function isAIEnabled(): boolean {
   const value = process.env.AI_ENABLED?.trim().toLowerCase();
+
   if (value === "false") {
     return false;
   }
+
   return true;
 }
 
@@ -27,11 +34,14 @@ function getErrorMessage(error: unknown): string {
   if (error instanceof Error) {
     return error.message;
   }
+
   return String(error);
 }
+
 function classifyAIError(error: unknown): string {
   const message = getErrorMessage(error);
   const normalized = message.toLowerCase();
+
   if (
     normalized.includes("quota") ||
     normalized.includes("rate limit") ||
@@ -39,6 +49,7 @@ function classifyAIError(error: unknown): string {
   ) {
     return "AI provider quota or rate limit exceeded.";
   }
+
   if (
     normalized.includes("api key") ||
     normalized.includes("authentication") ||
@@ -46,6 +57,7 @@ function classifyAIError(error: unknown): string {
   ) {
     return "AI provider authentication failed.";
   }
+
   if (
     normalized.includes("temporarily unavailable") ||
     normalized.includes("500") ||
@@ -54,8 +66,10 @@ function classifyAIError(error: unknown): string {
   ) {
     return "AI provider is temporarily unavailable.";
   }
+
   return message;
 }
+
 function normalizeAIAnalysis(
   analysis: AIAnalysisResult,
   mode: "ai" | "deterministic",
@@ -63,18 +77,23 @@ function normalizeAIAnalysis(
   return {
     ...analysis,
     analysisMode: mode,
+
     nextActions: Array.isArray(analysis.nextActions)
       ? analysis.nextActions.filter(
           (action): action is string =>
-            typeof action === "string" && action.trim().length > 0,
+            typeof action === "string" &&
+            action.trim().length > 0,
         )
       : [],
+
     evidenceUsed: Array.isArray(analysis.evidenceUsed)
       ? analysis.evidenceUsed.filter(
           (evidence): evidence is string =>
-            typeof evidence === "string" && evidence.trim().length > 0,
+            typeof evidence === "string" &&
+            evidence.trim().length > 0,
         )
       : [],
+
     limitations: Array.isArray(analysis.limitations)
       ? analysis.limitations.filter(
           (limitation): limitation is string =>
@@ -84,18 +103,32 @@ function normalizeAIAnalysis(
       : [],
   };
 }
+
 export async function orchestrateAILayer(
   incidentReport: AIAnalysisInput["incidentReport"],
 ): Promise<AIOrchestrationResult> {
   const provider = getProvider();
+
+  logger.section("AI Incident Intelligence");
+
+  logger.item(`Provider: ${provider}`);
+  logger.item(`AI enabled: ${isAIEnabled()}`);
+
   if (!isAIEnabled()) {
-    console.log(
+    logger.warn(
       "AI provider disabled. Running deterministic AIOps intelligence.",
     );
+
     try {
-      const fallbackAnalysis = buildDeterministicAIAnalysis(
-        incidentReport,
+      logger.info("Generating deterministic fallback analysis...");
+
+      const fallbackAnalysis =
+        buildDeterministicAIAnalysis(incidentReport);
+
+      logger.success(
+        "Deterministic fallback analysis generated successfully.",
       );
+
       return {
         available: true,
         provider: "deterministic-fallback",
@@ -108,25 +141,35 @@ export async function orchestrateAILayer(
       };
     } catch (error) {
       const message = getErrorMessage(error);
+
+      logger.error(
+        "Deterministic analysis failed while AI layer was disabled.",
+      );
+      logger.debug(message);
+
       return {
         available: false,
         provider: "unavailable",
         analysis: null,
-        error: `AI layer is disabled and deterministic analysis failed: ${message}`,
+        error:
+          `AI layer is disabled and deterministic analysis failed: ${message}`,
         mode: "unavailable",
       };
     }
   }
-  console.log("\n=====================================");
-  console.log("AI INCIDENT INTELLIGENCE");
-  console.log("=====================================\n");
-  console.log("Analyzing incident report...\n");
+
+  logger.info("Analyzing incident report with AI provider...");
+
   try {
     const analysis = await runAILayer(incidentReport);
+
     const normalizedAnalysis = normalizeAIAnalysis(
       analysis,
       "ai",
     );
+
+    logger.success("AI incident analysis completed successfully.");
+
     return {
       available: true,
       provider,
@@ -136,14 +179,21 @@ export async function orchestrateAILayer(
     };
   } catch (error) {
     const classifiedError = classifyAIError(error);
-    console.warn("AI provider unavailable.");
-    console.warn(`Reason: ${classifiedError}`);
-    console.warn(
-      "Falling back to deterministic AIOps intelligence.\n",
+
+    logger.warn("AI provider unavailable.");
+    logger.warn(`Reason: ${classifiedError}`);
+    logger.info(
+      "Falling back to deterministic AIOps intelligence...",
     );
+
     try {
       const fallbackAnalysis =
         buildDeterministicAIAnalysis(incidentReport);
+
+      logger.success(
+        "Deterministic fallback analysis completed successfully.",
+      );
+
       return {
         available: true,
         provider: "deterministic-fallback",
@@ -157,10 +207,12 @@ export async function orchestrateAILayer(
     } catch (fallbackError) {
       const fallbackErrorMessage =
         getErrorMessage(fallbackError);
-      console.error(
+
+      logger.error(
         "Deterministic AI fallback also failed.",
       );
-      console.error(fallbackErrorMessage);
+      logger.debug(fallbackErrorMessage);
+
       return {
         available: false,
         provider: "unavailable",

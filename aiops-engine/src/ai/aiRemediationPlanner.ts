@@ -143,16 +143,25 @@ function containsUnsupportedKubectlCommand(action: string): boolean {
 
 function commandIsGrounded(command: string, report: IncidentReport): boolean {
   const normalizedCommand = command.replace(/\s+/g, " ").trim();
-
-  const match = normalizedCommand.match(
-    /^kubectl\s+(?:rollout\s+restart|scale)\s+\S+\s+(\S+)/i,
-  );
-  if (!match) {
-    return true;
-  }
-  const target = match[1];
   const deterministicEvidence = JSON.stringify(report).toLowerCase();
-  return deterministicEvidence.includes(target.toLowerCase());
+
+  const restartMatch = normalizedCommand.match(
+    /^kubectl\s+rollout\s+restart\s+deployment\/([^\s]+)(?:\s+-n\s+([^\s]+))?$/i,
+  );
+
+  if (restartMatch) {
+    return deterministicEvidence.includes(restartMatch[1].toLowerCase());
+  }
+
+  const scaleMatch = normalizedCommand.match(
+    /^kubectl\s+scale\s+deployment\s+([^\s]+)\s+--replicas=\d+(?:\s+-n\s+([^\s]+))?$/i,
+  );
+
+  if (scaleMatch) {
+    return deterministicEvidence.includes(scaleMatch[1].toLowerCase());
+  }
+
+  return true;
 }
 
 function createRemediationAction(
@@ -191,21 +200,26 @@ function createRemediationAction(
   };
 }
 
-function identifyBlockedActions(analysis: AIAnalysisResult): string[] {
+function identifyBlockedActions(
+  analysis: AIAnalysisResult,
+  report: IncidentReport,
+): string[] {
   const blocked: string[] = [];
 
   for (const action of analysis.nextActions) {
+    const command = extractExecutableCommand(action);
+
     if (
       containsBlockedCommand(action) ||
-      containsUnsupportedKubectlCommand(action)
+      containsUnsupportedKubectlCommand(action) ||
+      !command ||
+      !isAllowedKubectlCommand(command) ||
+      !commandIsGrounded(command, report)
     ) {
-      blocked.push(action);
-      continue;
-    }
-    if (!extractExecutableCommand(action)) {
       blocked.push(action);
     }
   }
+
   return blocked;
 }
 
@@ -239,7 +253,7 @@ export function buildAIRemediationPlan(
     }
   }
 
-  const blockedActions = identifyBlockedActions(analysis);
+  const blockedActions = identifyBlockedActions(analysis, report);
 
   return {
     available: actions.length > 0,

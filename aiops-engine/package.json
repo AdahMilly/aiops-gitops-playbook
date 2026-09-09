@@ -5,11 +5,10 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "typecheck": "tsc --noEmit",
-    "build": "tsc",
     "remediation": "tsx src/ai/remediationRunner.ts",
-    "remediation:observe": "tsx src/ai/remediationRunner.ts --remediation-mode=observe",
-    "remediation:dry-run": "tsx src/ai/remediationRunner.ts --remediation-mode=dry-run"
+    "agentic:observe": "tsx src/ai/agenticRemediationRunner.ts --mode=observe",
+    "agentic:dry-run": "tsx src/ai/agenticRemediationRunner.ts --mode=dry-run",
+    "agentic:execute": "tsx src/ai/agenticRemediationRunner.ts --mode=execute"
   },
   "keywords": [],
   "author": "",
