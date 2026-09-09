@@ -2,17 +2,14 @@ export interface TelemetryEvent {
   timestamp?: string | Date;
   time?: string | Date;
   lastTimestamp?: string | Date;
-
   reason?: string;
   message?: string;
   type?: string;
-
   involvedObject?: {
     kind?: string;
     name?: string;
     namespace?: string;
   };
-
   metadata?: {
     name?: string;
     namespace?: string;
@@ -21,7 +18,6 @@ export interface TelemetryEvent {
 
 export interface CurrentKubernetesState {
   nodeReady?: boolean;
-
   pods?: Array<{
     name: string;
     namespace?: string;
@@ -34,54 +30,37 @@ export interface CurrentKubernetesState {
 export interface Telemetry {
   timestamp: string;
   service: string;
-
   metrics: {
     cpu: number;
     memory: number;
   };
-
   logs: any[];
   traces: any[];
-
   events?: TelemetryEvent[];
-
   kubernetes?: CurrentKubernetesState;
 }
 
 export type FindingStatus = "Active" | "Historical";
 
 export type FindingSeverity = "Low" | "Medium" | "High" | "Critical";
-
 export interface DetailedFinding {
   issue: string;
-
   severity: FindingSeverity;
-
   status: FindingStatus;
-
   source: "Kubernetes" | "Application" | "Metrics" | "Analysis";
-
   evidence: string[];
-
   timestamp?: string;
 }
 
 export type HealthStatus = "Healthy" | "Degraded" | "Incident";
-
 export interface HealthReport {
   cpu: string;
   memory: string;
-
   healthy: boolean;
-
   status: HealthStatus;
-
   applicationHealthy: boolean;
-
   kubernetesHealthy: boolean;
-
   findings: string[];
-
   detailedFindings: DetailedFinding[];
 }
 
@@ -107,33 +86,22 @@ export function analyze(telemetry: Telemetry): HealthReport {
 
     detailedFindings.push({
       issue: "HighCPU",
-
       severity: cpuUsage > 95 ? "Critical" : "High",
-
       status: "Active",
-
       source: "Metrics",
-
       evidence: [`CPU usage is ${cpuUsage.toFixed(2)}%`],
-
       timestamp: telemetry.timestamp,
     });
   }
 
   if (memoryMB > MEMORY_WARNING_THRESHOLD_MB) {
     findings.push("High memory usage");
-
     detailedFindings.push({
       issue: "HighMemory",
-
       severity: memoryMB > 500 ? "Critical" : "High",
-
       status: "Active",
-
       source: "Metrics",
-
       evidence: [`Memory usage is ${memoryMB.toFixed(2)} MB`],
-
       timestamp: telemetry.timestamp,
     });
   }
@@ -142,20 +110,13 @@ export function analyze(telemetry: Telemetry): HealthReport {
 
   if (kubernetes?.nodeReady === false) {
     kubernetesHealthy = false;
-
     findings.push("Kubernetes node is not ready");
-
     detailedFindings.push({
       issue: "NodeNotReady",
-
       severity: "High",
-
       status: "Active",
-
       source: "Kubernetes",
-
       evidence: ["Kubernetes node is currently NotReady"],
-
       timestamp: telemetry.timestamp,
     });
   }
@@ -165,32 +126,21 @@ export function analyze(telemetry: Telemetry): HealthReport {
       if (pod.ready) {
         continue;
       }
-
       applicationHealthy = false;
-
       findings.push(`Pod ${pod.name} is not ready`);
-
       const evidence: string[] = [`Pod ${pod.name} is not ready`];
-
       if (pod.phase) {
         evidence.push(`Pod phase: ${pod.phase}`);
       }
-
       if (pod.restartCount !== undefined) {
         evidence.push(`Restart count: ${pod.restartCount}`);
       }
-
       detailedFindings.push({
         issue: "PodNotReady",
-
         severity: "High",
-
         status: "Active",
-
         source: "Application",
-
         evidence,
-
         timestamp: telemetry.timestamp,
       });
     }
@@ -230,15 +180,10 @@ export function analyze(telemetry: Telemetry): HealthReport {
 
       detailedFindings.push({
         issue: "ReadinessProbeFailure",
-
         severity: "High",
-
         status: "Active",
-
         source: "Application",
-
         evidence: [eventMessage],
-
         timestamp,
       });
 
@@ -254,18 +199,12 @@ export function analyze(telemetry: Telemetry): HealthReport {
 
       detailedFindings.push({
         issue: "LivenessProbeFailure",
-
         severity: "High",
-
         status: "Active",
-
         source: "Application",
-
         evidence: [eventMessage],
-
         timestamp,
       });
-
       continue;
     }
 
@@ -274,23 +213,15 @@ export function analyze(telemetry: Telemetry): HealthReport {
       normalizedMessage.includes("crashloopbackoff")
     ) {
       applicationHealthy = false;
-
       findings.push("Pod is CrashLoopBackOff");
-
       detailedFindings.push({
         issue: "CrashLoopBackOff",
-
         severity: "Critical",
-
         status: "Active",
-
         source: "Application",
-
         evidence: [message || "Pod is currently in CrashLoopBackOff"],
-
         timestamp,
       });
-
       continue;
     }
 
@@ -299,23 +230,15 @@ export function analyze(telemetry: Telemetry): HealthReport {
       normalizedMessage.includes("oomkilled")
     ) {
       applicationHealthy = false;
-
       findings.push("Container OOMKilled");
-
       detailedFindings.push({
         issue: "OOMKilled",
-
         severity: "Critical",
-
         status: "Active",
-
         source: "Application",
-
         evidence: [message || "Container was OOMKilled"],
-
         timestamp,
       });
-
       continue;
     }
     if (
@@ -323,23 +246,15 @@ export function analyze(telemetry: Telemetry): HealthReport {
       normalizedMessage.includes("node is not ready")
     ) {
       kubernetesHealthy = false;
-
       findings.push("Kubernetes node is not ready");
-
       detailedFindings.push({
         issue: "NodeNotReady",
-
         severity: "High",
-
         status: "Active",
-
         source: "Kubernetes",
-
         evidence: [message || "Kubernetes node is not ready"],
-
         timestamp,
       });
-
       continue;
     }
 
@@ -348,25 +263,16 @@ export function analyze(telemetry: Telemetry): HealthReport {
       normalizedMessage.includes("failed scheduling")
     ) {
       kubernetesHealthy = false;
-
       applicationHealthy = false;
-
       findings.push("Pod scheduling failure");
-
       detailedFindings.push({
         issue: "FailedScheduling",
-
         severity: "High",
-
         status: "Active",
-
         source: "Kubernetes",
-
         evidence: [message || "Pod scheduling failed"],
-
         timestamp,
       });
-
       continue;
     }
 
@@ -377,37 +283,24 @@ export function analyze(telemetry: Telemetry): HealthReport {
       normalizedMessage.includes("errimagepull")
     ) {
       applicationHealthy = false;
-
       findings.push("Container image pull failed");
-
       detailedFindings.push({
         issue: "ImagePullFailure",
-
         severity: "High",
-
         status: "Active",
-
         source: "Application",
-
         evidence: [message || "Container image pull failed"],
-
         timestamp,
       });
-
       continue;
     }
     if (normalizedReason === "unhealthy") {
       detailedFindings.push({
         issue: "Unhealthy",
-
         severity: "Medium",
-
         status: "Active",
-
         source: "Kubernetes",
-
         evidence: [message || "Kubernetes reported an unhealthy resource"],
-
         timestamp,
       });
     }

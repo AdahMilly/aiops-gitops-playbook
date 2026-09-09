@@ -163,7 +163,7 @@ async function main() {
   }
   logger.section("AI Remediation Planner");
   const remediationPlan = aiResult.analysis
-    ? buildAIRemediationPlan(aiResult.analysis)
+    ? buildAIRemediationPlan(report, aiResult.analysis)
     : null;
   let remediationExecution: RemediationExecutionReport | null = null;
   if (remediationPlan) {

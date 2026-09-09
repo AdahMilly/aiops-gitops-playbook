@@ -110,7 +110,6 @@ export function scoreIncident(data: IncidentScoreInput): IncidentScore {
   };
 }
 
-
 function calculateHealthScore(
   health: HealthStatus,
   reasons: Set<string>,

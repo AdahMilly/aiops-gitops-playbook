@@ -2,23 +2,14 @@ export type TrendDirection = "rising" | "falling" | "stable";
 
 export interface TrendAnalysis {
   trend: TrendDirection;
-
   slope: number;
-
   first: number;
-
   current: number;
-
   average: number;
-
   minimum: number;
-
   maximum: number;
-
   change: number;
-
   anomaly: boolean;
-
   findings: string[];
 }
 
@@ -63,7 +54,6 @@ export function analyzeTrend(
 
   const average =
     cleaned.reduce((sum, value) => sum + value, 0) / cleaned.length;
-
   const change = first === 0 ? 0 : ((current - first) / Math.abs(first)) * 100;
 
   let trend: TrendDirection = "stable";
@@ -94,7 +84,6 @@ export function analyzeTrend(
     cleaned.length >= minimumPoints &&
     average > 0 &&
     maximum > average * (1 + spikeThresholdPercent / 100);
-
   if (hasSpike) {
     findings.push(
       `Metric spike detected: maximum ${formatValue(
@@ -137,7 +126,6 @@ function calculateSlope(values: number[]): number {
   for (let i = 0; i < n; i++) {
     const x = i;
     const y = values[i];
-
     sumX += x;
     sumY += y;
     sumXY += x * y;
@@ -149,7 +137,6 @@ function calculateSlope(values: number[]): number {
   if (denominator === 0) {
     return 0;
   }
-
   return (n * sumXY - sumX * sumY) / denominator;
 }
 
@@ -157,6 +144,5 @@ function formatValue(value: number): string {
   if (Math.abs(value) < 1) {
     return value.toFixed(4);
   }
-
   return value.toFixed(2);
 }

@@ -26,6 +26,10 @@ export interface RemediationAuditEntry {
   executedAt: string;
   output?: string;
   error?: string;
+  verificationStatus?: string;
+  verificationMessage?: string;
+  verificationCommand?: string;
+  verifiedAt?: string;
 }
 
 const DEFAULT_AUDIT_FILE = resolve(
@@ -93,6 +97,10 @@ export function createRemediationAuditEntry(
     approvalId?: string;
     output?: string;
     error?: string;
+    verificationStatus?: string;
+    verificationMessage?: string;
+    verificationCommand?: string;
+    verifiedAt?: string;
   },
 ): RemediationAuditEntry {
   const now = new Date().toISOString();
@@ -112,5 +120,9 @@ export function createRemediationAuditEntry(
     executedAt: now,
     output: values.output,
     error: values.error,
+    verificationStatus: values.verificationStatus,
+    verificationMessage: values.verificationMessage,
+    verificationCommand: values.verificationCommand,
+    verifiedAt: values.verifiedAt,
   };
 }
