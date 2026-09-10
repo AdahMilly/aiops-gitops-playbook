@@ -8,7 +8,10 @@
     "remediation": "tsx src/ai/remediationRunner.ts",
     "agentic:observe": "tsx src/ai/agenticRemediationRunner.ts --mode=observe",
     "agentic:dry-run": "tsx src/ai/agenticRemediationRunner.ts --mode=dry-run",
-    "agentic:execute": "tsx src/ai/agenticRemediationRunner.ts --mode=execute"
+    "agentic:execute": "tsx src/ai/agenticRemediationRunner.ts --mode=execute",
+    "agentic:scheduler": "tsx src/ai/agenticScheduler.ts",
+    "agentic:scheduler:observe": "cross-env AIOPS_SCHEDULED_MODE=observe tsx src/ai/agenticScheduler.ts",
+    "agentic:scheduler:dry-run": "cross-env AIOPS_SCHEDULED_MODE=dry-run tsx src/ai/agenticScheduler.ts"
   },
   "keywords": [],
   "author": "",
